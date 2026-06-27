@@ -912,11 +912,12 @@ function call(action, params, cb) {
   if (!API) { cb({ ok: false, error: "API URL not set" }); return; }
   params.action = action;
   if (token) params.token = token;
-  fetch(API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params)
-  }).then(function(r) { return r.json(); }).then(cb).catch(function() { cb({ ok: false, error: "Network error" }); });
+  var qs = Object.keys(params).map(function(k) {
+    return encodeURIComponent(k) + "=" + encodeURIComponent(typeof params[k] === "object" ? JSON.stringify(params[k]) : params[k]);
+  }).join("&");
+  fetch(API + "?" + qs, { method: "GET", redirect: "follow" })
+    .then(function(r) { return r.json(); }).then(cb)
+    .catch(function() { cb({ ok: false, error: "Network error" }); });
 }
 
 function toast(msg, type) {
