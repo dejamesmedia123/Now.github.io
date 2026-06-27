@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NowFunded</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+--bg:#0a0a0f;
+--surface:#13131a;
+--surface2:#1c1c27;
+--border:#2a2a3a;
+--accent:#7c6dfa;
+--accent2:#a78bfa;
+--green:#22c55e;
+--red:#ef4444;
+--yellow:#f59e0b;
+--text:#f1f0ff;
+--muted:#8b8ba8;
+--radius:14px;
+--nav:64px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;overflow:hidden}
+.screen{display:none;flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:calc(var(--nav) + 16px)}
+.screen.active{display:flex;flex-direction:column}
+.screen.no-nav{padding-bottom:0}
+.nav{position:fixed;bottom:0;left:0;right:0;height:var(--nav);background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:100}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--muted);font-size:10px;font-weight:500;transition:color .2s;position:relative}
+.nav-item.active{color:var(--accent2)}
+.nav-item svg{width:22px;height:22px}
+.nav-badge{position:absolute;top:8px;right:calc(50% - 18px);background:var(--red);color:#fff;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.toast-container{position:fixed;top:16px;left:16px;right:16px;z-index:999;pointer-events:none;display:flex;flex-direction:column;gap:8px}
+.toast{padding:12px 16px;border-radius:10px;font-size:13px;font-weight:500;animation:slideIn .3s ease;pointer-events:auto}
+.toast.success{background:#14532d;color:#86efac;border:1px solid #166534}
+.toast.error{background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b}
+.toast.info{background:#1e1b4b;color:#c4b5fd;border:1px solid #3730a3}
+@keyframes slideIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.skeleton{background:linear-gradient(90deg,var(--surface) 25%,var(--surface2) 50%,var(--surface) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 20px;border-radius:var(--radius);font-size:15px;font-weight:600;border:none;cursor:pointer;transition:opacity .15s,transform .1s;width:100%}
+.btn:active{transform:scale(.98);opacity:.9}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-danger{background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b}
+.btn-sm{padding:8px 14px;font-size:13px;width:auto}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.input-group{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.input-group label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.input{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;width:100%;outline:none;transition:border-color .2s}
+.input:focus{border-color:var(--accent)}
+.input::placeholder{color:var(--muted)}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.badge-green{background:#14532d22;color:var(--green);border:1px solid #14532d}
+.badge-red{background:#7f1d1d22;color:var(--red);border:1px solid #7f1d1d}
+.badge-yellow{background:#78350f22;color:var(--yellow);border:1px solid #78350f}
+.badge-purple{background:#3b0764aa;color:var(--accent2);border:1px solid #4c1d95}
+.badge-gray{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
+.header{padding:16px 16px 8px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:20px;font-weight:700}
+.divider{height:1px;background:var(--border);margin:16px 0}
+.page-pad{padding:0 16px}
+.row{display:flex;align-items:center;justify-content:space-between}
+.col{display:flex;flex-direction:column;gap:4px}
+.label{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+.value{font-size:15px;font-weight:600}
+.modal-overlay{position:fixed;inset:0;background:#000a;z-index:200;display:flex;align-items:flex-end}
+.modal-overlay.hidden{display:none}
+.modal{background:var(--surface);border-radius:20px 20px 0 0;padding:24px 20px 36px;width:100%;max-height:85vh;overflow-y:auto}
+.modal-handle{width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px}
+.modal h2{font-size:18px;font-weight:700;margin-bottom:16px}
+#landing{background:var(--bg)}
+.hero{padding:40px 24px 32px;text-align:center}
+.hero-logo{width:64px;height:64px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px}
+.hero h1{font-size:32px;font-weight:800;line-height:1.15;margin-bottom:12px;background:linear-gradient(135deg,#fff,var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{color:var(--muted);font-size:15px;line-height:1.6;margin-bottom:28px}
+.stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:32px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 10px;text-align:center}
+.stat-card .num{font-size:20px;font-weight:800;color:var(--accent2)}
+.stat-card .lbl{font-size:10px;color:var(--muted);margin-top:2px}
+.how-section{padding:0 24px 32px}
+.how-section h2{font-size:18px;font-weight:700;margin-bottom:16px}
+.how-step{display:flex;gap:14px;margin-bottom:20px;align-items:flex-start}
+.how-num{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
+.how-step p{color:var(--muted);font-size:14px;line-height:1.5;margin-top:2px}
+.features-section{padding:0 24px 32px}
+.features-section h2{font-size:18px;font-weight:700;margin-bottom:16px}
+.feature-item{display:flex;gap:14px;align-items:flex-start;margin-bottom:16px}
+.feature-icon{font-size:22px;flex-shrink:0}
+.feature-item h3{font-size:14px;font-weight:600;margin-bottom:2px}
+.feature-item p{font-size:13px;color:var(--muted);line-height:1.5}
+.cta-section{padding:0 24px 40px}
+.cta-section .note{font-size:12px;color:var(--muted);text-align:center;margin-top:10px}
+#onboarding{background:var(--bg)}
+.onboard-wrap{flex:1;display:flex;flex-direction:column;padding:24px}
+.onboard-slides{flex:1;overflow:hidden;position:relative}
+.onboard-slide{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;opacity:0;transform:translateX(60px);transition:all .35s ease;pointer-events:none}
+.onboard-slide.active{opacity:1;transform:translateX(0);pointer-events:auto}
+.onboard-slide.prev{opacity:0;transform:translateX(-60px)}
+.onboard-icon{font-size:64px;margin-bottom:24px}
+.onboard-slide h2{font-size:24px;font-weight:800;margin-bottom:12px;line-height:1.2}
+.onboard-slide p{color:var(--muted);font-size:15px;line-height:1.6;max-width:280px}
+.dots{display:flex;gap:8px;justify-content:center;margin:20px 0}
+.dot{width:8px;height:8px;border-radius:4px;background:var(--border);transition:all .3s}
+.dot.active{width:24px;background:var(--accent)}
+.onboard-nav{display:flex;gap:12px;padding-top:8px}
+.onboard-nav .btn{flex:1}
+.onboard-skip{text-align:center;padding:12px;color:var(--muted);font-size:14px;cursor:pointer;text-decoration:underline}
+#dashboard{}
+.dash-header{padding:20px 16px 0}
+.dash-greeting{font-size:22px;font-weight:800;margin-bottom:4px}
+.dash-sub{color:var(--muted);font-size:14px;margin-bottom:20px}
+.account-switcher{display:flex;gap:8px;overflow-x:auto;padding:0 16px;margin-bottom:16px;scrollbar-width:none}
+.account-switcher::-webkit-scrollbar{display:none}
+.acct-chip{flex-shrink:0;padding:8px 14px;border-radius:20px;background:var(--surface);border:1px solid var(--border);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
+.acct-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.phase-ladder{display:flex;align-items:center;gap:0;overflow-x:auto;padding:0 16px 16px;scrollbar-width:none}
+.phase-ladder::-webkit-scrollbar{display:none}
+.phase-step{display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0}
+.phase-node{width:36px;height:36px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .3s}
+.phase-node.done{background:var(--green);border-color:var(--green)}
+.phase-node.current{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px #7c6dfa22}
+.phase-node.locked{opacity:.4}
+.phase-label{font-size:10px;color:var(--muted);font-weight:500;text-align:center;max-width:50px}
+.phase-line{flex:1;height:2px;background:var(--border);min-width:24px;margin-bottom:18px}
+.phase-line.done{background:var(--green)}
+.creds-card{margin:0 16px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.creds-card h3{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.cred-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.cred-val{font-family:'Courier New',monospace;font-size:13px;color:var(--accent2);background:var(--surface2);padding:6px 10px;border-radius:8px;flex:1;margin-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.copy-btn{background:none;border:none;cursor:pointer;color:var(--muted);padding:6px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.copy-btn:active{color:var(--accent2)}
+.plan-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 16px}
+.plan-stat{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
+.payout-btn-wrap{padding:0 16px 16px}
+.payout-history{padding:0 16px}
+.payout-history h3{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.payout-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
+.payout-item:last-child{border-bottom:none}
+#marketplace{}
+.market-header{padding:20px 16px 16px}
+.market-header h1{font-size:22px;font-weight:800;margin-bottom:4px}
+.market-header p{color:var(--muted);font-size:14px}
+.plans-list{padding:0 16px}
+.plan-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;cursor:pointer;transition:border-color .2s}
+.plan-card.selected{border-color:var(--accent)}
+.plan-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.plan-size{font-size:20px;font-weight:800}
+.plan-price{font-size:18px;font-weight:700;color:var(--accent2)}
+.plan-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.plan-tag{font-size:11px;background:var(--surface2);border:1px solid var(--border);padding:3px 8px;border-radius:6px;color:var(--muted)}
+.order-summary{margin:0 16px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.order-summary h3{font-size:14px;font-weight:700;margin-bottom:12px}
+.summary-row{display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;color:var(--muted)}
+.summary-row.total{color:var(--text);font-weight:700;font-size:16px;border-top:1px solid var(--border);padding-top:10px;margin-top:6px}
+.discount-row{display:flex;gap:8px;margin:0 16px 16px}
+.discount-row .input{flex:1}
+.wallet-section{margin:0 16px 16px}
+.wallet-addr{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-family:'Courier New',monospace;font-size:12px;color:var(--accent2);word-break:break-all;margin-bottom:10px}
+.payment-section{padding:0 16px 16px}
+#points-screen{}
+.pts-hero{padding:24px 16px;text-align:center}
+.pts-balance{font-size:48px;font-weight:900;color:var(--accent2);line-height:1}
+.pts-label{font-size:14px;color:var(--muted);margin-top:4px;margin-bottom:20px}
+.section-title{padding:0 16px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.ledger-list{padding:0 16px}
+.ledger-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
+.ledger-item:last-child{border-bottom:none}
+.ledger-amount{font-weight:700;font-size:15px}
+.ledger-amount.earn{color:var(--green)}
+.ledger-amount.spend{color:var(--red)}
+.ref-card{margin:0 16px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.ref-link{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:10px}
+.ref-link code{flex:1;font-size:12px;color:var(--accent2);word-break:break-all}
+.shop-grid{padding:0 16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.shop-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color .2s}
+.shop-item:disabled{opacity:.5;cursor:not-allowed}
+.shop-item.cant-afford{opacity:.5}
+.shop-item h4{font-size:13px;font-weight:700;margin-bottom:4px}
+.shop-item .cost{font-size:20px;font-weight:800;color:var(--accent2)}
+.shop-item .cost-label{font-size:11px;color:var(--muted)}
+.shop-item .disc{font-size:12px;color:var(--green);margin-top:6px}
+.ref-list{padding:0 16px}
+.ref-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
+.ref-item:last-child{border-bottom:none}
+#support-screen{}
+.threads-list{padding:0 16px}
+.thread-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;cursor:pointer}
+.thread-subject{font-size:14px;font-weight:600;margin-bottom:4px}
+.thread-meta{font-size:12px;color:var(--muted)}
+.new-thread-btn{margin:16px;display:block}
+.chat-screen{padding-bottom:80px}
+.chat-header{padding:16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10}
+.chat-back{background:none;border:none;color:var(--text);cursor:pointer;padding:4px;display:flex;align-items:center}
+.chat-subject{font-size:16px;font-weight:700}
+.messages-list{padding:16px;display:flex;flex-direction:column;gap:10px}
+.message-bubble{max-width:85%;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.5}
+.message-bubble.trader{background:var(--accent);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.message-bubble.admin{background:var(--surface);border:1px solid var(--border);align-self:flex-start;border-bottom-left-radius:4px}
+.msg-time{font-size:10px;color:rgba(255,255,255,.6);margin-top:4px}
+.message-bubble.admin .msg-time{color:var(--muted)}
+.chat-input-bar{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:10px}
+.chat-input-bar .input{flex:1;margin:0}
+.chat-send{background:var(--accent);border:none;border-radius:10px;padding:12px 16px;cursor:pointer;color:#fff;font-weight:600;font-size:14px;flex-shrink:0}
+.empty-state{text-align:center;padding:40px 24px;color:var(--muted)}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+.empty-state h3{font-size:16px;font-weight:600;color:var(--text);margin-bottom:8px}
+.empty-state p{font-size:14px;line-height:1.5}
+.loading-skeleton{padding:16px;display:flex;flex-direction:column;gap:12px}
+.sk-row{height:60px;border-radius:12px}
+.blown-banner{background:#7f1d1d22;border:1px solid #7f1d1d;border-radius:12px;margin:0 16px 16px;padding:14px;display:flex;gap:12px;align-items:flex-start}
+.blown-banner p{font-size:14px;line-height:1.5;color:#fca5a5}
+.status-banner{border-radius:12px;margin:0 16px 16px;padding:14px;display:flex;gap:12px;align-items:flex-start}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="toast-container" id="toastContainer"></div>
+
+  <div id="landing" class="screen no-nav active">
+    <div class="hero">
+      <div class="hero-logo">🚀</div>
+      <h1>Trade. Pass. Get Funded.</h1>
+      <p>Join hundreds of traders who've earned funded accounts and consistent payouts through NowFunded.</p>
+      <div class="stats-row" id="publicStats">
+        <div class="stat-card"><div class="num skeleton" style="height:28px;width:60px;margin:0 auto"></div><div class="lbl">Funded</div></div>
+        <div class="stat-card"><div class="num skeleton" style="height:28px;width:60px;margin:0 auto"></div><div class="lbl">Paid Out</div></div>
+        <div class="stat-card"><div class="num skeleton" style="height:28px;width:60px;margin:0 auto"></div><div class="lbl">Split</div></div>
+      </div>
+      <button class="btn btn-primary" id="landingCTA">Start Your Challenge</button>
+    </div>
+    <div class="how-section">
+      <h2>How It Works</h2>
+      <div class="how-step"><div class="how-num">1</div><div><strong>Buy a Challenge</strong><p>Choose your account size and pay a one-time fee to start your evaluation.</p></div></div>
+      <div class="how-step"><div class="how-num">2</div><div><strong>Pass Phase 1 & 2</strong><p>Hit the profit target without breaching drawdown limits across both phases.</p></div></div>
+      <div class="how-step"><div class="how-num">3</div><div><strong>Get Funded</strong><p>Receive your MT5 credentials and start trading the firm's capital.</p></div></div>
+      <div class="how-step"><div class="how-num">4</div><div><strong>Request Payouts</strong><p>Split profits on your schedule. Scale up after consecutive successful payouts.</p></div></div>
+    </div>
+    <div class="features-section">
+      <h2>Why NowFunded</h2>
+      <div class="feature-item"><div class="feature-icon">⚡</div><div><h3>Fast Evaluation</h3><p>No time limits on phases — trade at your own pace without pressure.</p></div></div>
+      <div class="feature-item"><div class="feature-icon">💰</div><div><h3>High Payout Splits</h3><p>Keep the majority of what you earn from day one.</p></div></div>
+      <div class="feature-item"><div class="feature-icon">📈</div><div><h3>Scale Up</h3><p>After consistent payouts, your account size grows automatically.</p></div></div>
+      <div class="feature-item"><div class="feature-icon">🤝</div><div><h3>Earn by Referring</h3><p>Get points for every trader you bring in. Redeem them for discounts.</p></div></div>
+    </div>
+    <div class="cta-section">
+      <button class="btn btn-primary" id="landingCTA2">Get Started in Telegram</button>
+      <p class="note">Open in Telegram to create your account and start your challenge.</p>
+    </div>
+  </div>
+
+  <div id="onboarding" class="screen no-nav">
+    <div class="onboard-wrap">
+      <div style="display:flex;justify-content:flex-end;padding-bottom:8px">
+        <span id="onboardSkip" class="onboard-skip">Skip</span>
+      </div>
+      <div class="onboard-slides" id="onboardSlides">
+        <div class="onboard-slide active" data-index="0">
+          <div class="onboard-icon">🏆</div>
+          <h2>Welcome to NowFunded</h2>
+          <p>The prop trading platform built inside Telegram. Prove your skills, get funded, keep the profits.</p>
+        </div>
+        <div class="onboard-slide" data-index="1">
+          <div class="onboard-icon">📊</div>
+          <h2>Two-Phase Challenge</h2>
+          <p>Pass Phase 1 and Phase 2 by hitting profit targets without breaching drawdown. No time pressure.</p>
+        </div>
+        <div class="onboard-slide" data-index="2">
+          <div class="onboard-icon">🖥</div>
+          <h2>Get Your MT5 Account</h2>
+          <p>Once you pass, receive real MT5 credentials. Trade the firm's capital with our rules and support.</p>
+        </div>
+        <div class="onboard-slide" data-index="3">
+          <div class="onboard-icon">💸</div>
+          <h2>Payouts & Points</h2>
+          <p>Request profit splits anytime. Earn points by referring friends and redeem them for challenge discounts.</p>
+        </div>
+      </div>
+      <div class="dots" id="onboardDots">
+        <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <div class="onboard-nav">
+        <button class="btn btn-secondary" id="onboardBack" style="display:none">Back</button>
+        <button class="btn btn-primary" id="onboardNext">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dashboard" class="screen">
+    <div class="dash-header">
+      <div class="dash-greeting" id="dashGreeting">Welcome back!</div>
+      <div class="dash-sub" id="dashSub">Your trading accounts</div>
+    </div>
+    <div class="account-switcher" id="accountSwitcher"></div>
+    <div id="dashContent">
+      <div class="loading-skeleton">
+        <div class="sk-row skeleton"></div>
+        <div class="sk-row skeleton"></div>
+        <div class="sk-row skeleton"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="marketplace" class="screen">
+    <div class="market-header">
+      <h1>Challenges</h1>
+      <p>Choose your account size and start your evaluation</p>
+    </div>
+    <div class="plans-list" id="plansList">
+      <div class="loading-skeleton">
+        <div class="sk-row skeleton"></div>
+        <div class="sk-row skeleton"></div>
+      </div>
+    </div>
+    <div class="order-summary" id="orderSummary" style="display:none">
+      <h3>Order Summary</h3>
+      <div id="summaryContent"></div>
+    </div>
+    <div id="discountSection" style="display:none">
+      <div class="discount-row">
+        <input class="input" id="discountInput" placeholder="Promo code" style="text-transform:uppercase">
+        <button class="btn btn-secondary btn-sm" id="applyDiscount" style="width:auto;padding:12px 16px">Apply</button>
+      </div>
+      <div id="discountMsg" style="padding:0 16px 8px;font-size:13px"></div>
+    </div>
+    <div id="walletSection" style="display:none">
+      <div class="wallet-section">
+        <div class="label" style="padding:0 0 8px">Send payment to this wallet</div>
+        <div class="wallet-addr" id="walletAddr"></div>
+        <button class="btn btn-secondary" id="copyWallet">Copy Wallet Address</button>
+      </div>
+    </div>
+    <div id="paymentSection" style="display:none" class="payment-section">
+      <div class="input-group">
+        <label>Transaction Hash / Payment Reference</label>
+        <input class="input" id="paymentRef" placeholder="Paste your TX hash or reference">
+      </div>
+      <button class="btn btn-primary" id="submitOrder">Submit Payment</button>
+    </div>
+    <div id="orderConfirm" style="display:none;padding:24px 16px;text-align:center">
+      <div style="font-size:48px;margin-bottom:16px">✅</div>
+      <h2 style="margin-bottom:8px">Order Submitted!</h2>
+      <p style="color:var(--muted);font-size:14px;line-height:1.6">Your payment is being reviewed. You'll get a Telegram notification once confirmed — usually within a few hours.</p>
+      <button class="btn btn-secondary" style="margin-top:20px" id="backToDash">Back to Dashboard</button>
+    </div>
+  </div>
+
+  <div id="points-screen" class="screen">
+    <div class="pts-hero">
+      <div class="pts-balance" id="ptsBalance">—</div>
+      <div class="pts-label">Points Balance</div>
+      <button class="btn btn-secondary" style="width:auto;padding:10px 20px" id="shopBtn">Redeem Points</button>
+    </div>
+    <div class="ref-card">
+      <div class="row"><span style="font-weight:700;font-size:15px">Your Referral Code</span><span id="userRefCode" class="badge badge-purple">—</span></div>
+      <div class="ref-link">
+        <code id="refLink">—</code>
+        <button class="btn btn-secondary btn-sm" id="copyRef" style="flex-shrink:0;width:auto;padding:8px 12px">Copy</button>
+      </div>
+    </div>
+    <div class="section-title">Referrals</div>
+    <div class="ref-list" id="refList"></div>
+    <div class="divider"></div>
+    <div class="section-title">Points History</div>
+    <div class="ledger-list" id="ledgerList"></div>
+  </div>
+
+  <div id="support-screen" class="screen">
+    <div class="header"><h1>Support</h1></div>
+    <button class="btn btn-primary new-thread-btn" id="newThreadBtn">+ New Support Request</button>
+    <div class="threads-list" id="threadsList"></div>
+  </div>
+
+  <div id="chat-screen" class="screen no-nav" style="display:none;flex-direction:column">
+    <div class="chat-header">
+      <button class="chat-back" id="chatBack">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <div><div class="chat-subject" id="chatSubject"></div><div style="font-size:12px;color:var(--muted)" id="chatStatus"></div></div>
+    </div>
+    <div class="messages-list" id="messagesList" style="flex:1;overflow-y:auto"></div>
+    <div class="chat-input-bar" id="chatInputBar">
+      <input class="input" id="chatInput" placeholder="Type a message...">
+      <button class="chat-send" id="chatSend">Send</button>
+    </div>
+  </div>
+
+  <nav class="nav" id="mainNav" style="display:none">
+    <div class="nav-item active" data-screen="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" data-screen="marketplace">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      Buy
+    </div>
+    <div class="nav-item" data-screen="points-screen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Points
+    </div>
+    <div class="nav-item" data-screen="support-screen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Support
+    </div>
+  </nav>
+</div>
+
+<div class="modal-overlay hidden" id="payoutModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>Request Payout</h2>
+    <div id="payoutSplitInfo" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:16px;font-size:14px;color:var(--muted)"></div>
+    <div class="input-group"><label>Payout Amount (USD)</label><input class="input" id="payoutAmount" type="number" placeholder="Enter amount"></div>
+    <div class="input-group"><label>Your Wallet Address</label><input class="input" id="payoutWallet" placeholder="Crypto wallet address"></div>
+    <button class="btn btn-primary" id="submitPayout">Request Payout</button>
+    <button class="btn btn-secondary" style="margin-top:10px" id="closePayoutModal">Cancel</button>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="newThreadModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>New Support Request</h2>
+    <div class="input-group"><label>Subject</label><input class="input" id="threadSubject" placeholder="What do you need help with?"></div>
+    <div class="input-group"><label>Message</label><textarea class="input" id="threadBody" rows="4" placeholder="Describe your issue..." style="resize:none"></textarea></div>
+    <button class="btn btn-primary" id="submitThread">Send Request</button>
+    <button class="btn btn-secondary" style="margin-top:10px" id="closeThreadModal">Cancel</button>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="shopModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>Points Shop</h2>
+    <p style="color:var(--muted);font-size:14px;margin-bottom:16px">Redeem your points for challenge discount codes.</p>
+    <div class="shop-grid" id="shopGrid"></div>
+    <button class="btn btn-secondary" id="closeShopModal">Close</button>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="redeemConfirmModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>Confirm Redemption</h2>
+    <p id="redeemConfirmText" style="color:var(--muted);font-size:14px;margin-bottom:20px;line-height:1.6"></p>
+    <button class="btn btn-primary" id="confirmRedeem">Confirm & Redeem</button>
+    <button class="btn btn-secondary" style="margin-top:10px" id="cancelRedeem">Cancel</button>
+  </div>
+</div>
+
+<script>
+var API = "https://script.google.com/macros/s/AKfycbxtxW3S5VxqvRQdXaEWGpAPKv9ltJ7qLF0uTeSEPkWJgw6ROr9LGQPJRPrKeMDQjMwk/exec";
+var tg = window.Telegram && window.Telegram.WebApp;
+var state = { user: null, accounts: [], currentAccount: null, currentThread: null, selectedPlan: null, discount: null, points: 0 };
+
+function init() {
+  if (document.getElementById("app").dataset.api) {
+    API = document.getElementById("app").dataset.api;
+  }
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    var cs = tg.colorScheme;
+    if (cs === "light") {
+      document.documentElement.style.setProperty("--bg", "#f8f8fc");
+      document.documentElement.style.setProperty("--surface", "#ffffff");
+      document.documentElement.style.setProperty("--surface2", "#f0f0f8");
+      document.documentElement.style.setProperty("--text", "#0a0a0f");
+      document.documentElement.style.setProperty("--muted", "#6b6b88");
+      document.documentElement.style.setProperty("--border", "#e2e2f0");
+    }
+  }
+  loadPublicStats();
+  if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+    var tgUser = tg.initDataUnsafe.user;
+    var refBy = "";
+    if (tg.initDataUnsafe.start_param) refBy = tg.initDataUnsafe.start_param;
+    call("initUser", { telegramId: tgUser.id, username: tgUser.username, firstName: tgUser.first_name, lastName: tgUser.last_name, referredBy: refBy }, function(res) {
+      if (res.ok) {
+        state.user = res.data.user;
+        if (res.data.isNew || state.user.onboarded !== "true") {
+          showScreen("onboarding");
+        } else {
+          enterApp();
+        }
+      } else {
+        toast("Could not load your account. Try again.", "error");
+      }
+    });
+  } else {
+    document.getElementById("landingCTA").addEventListener("click", function() { toast("Open NowFunded inside Telegram to get started.", "info"); });
+    document.getElementById("landingCTA2").addEventListener("click", function() { toast("Open NowFunded inside Telegram to get started.", "info"); });
+  }
+  setupEventListeners();
+}
+
+function loadPublicStats() {
+  call("getPublicStats", {}, function(res) {
+    if (!res.ok) return;
+    var d = res.data;
+    var el = document.getElementById("publicStats");
+    el.innerHTML = '<div class="stat-card"><div class="num">' + d.accountsIssued + '</div><div class="lbl">Funded</div></div>' +
+      '<div class="stat-card"><div class="num">$' + formatNum(d.totalPayouts) + '</div><div class="lbl">Paid Out</div></div>' +
+      '<div class="stat-card"><div class="num">' + d.payoutSplit1 + '%</div><div class="lbl">Split</div></div>';
+  });
+}
+
+function enterApp() {
+  showScreen("dashboard");
+  document.getElementById("mainNav").style.display = "flex";
+  loadDashboard();
+}
+
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(function(s) { s.classList.remove("active"); });
+  var el = document.getElementById(id);
+  if (el) { el.classList.add("active"); el.scrollTop = 0; }
+  document.querySelectorAll(".nav-item").forEach(function(n) {
+    n.classList.toggle("active", n.dataset.screen === id);
+  });
+  if (id === "chat-screen") {
+    document.getElementById("chat-screen").style.display = "flex";
+    document.getElementById("mainNav").style.display = "none";
+  } else {
+    document.getElementById("chat-screen").style.display = "none";
+    if (state.user) document.getElementById("mainNav").style.display = "flex";
+  }
+  if (tg && tg.BackButton) {
+    var noBack = ["dashboard","landing","onboarding"];
+    if (noBack.indexOf(id) >= 0) tg.BackButton.hide();
+    else tg.BackButton.show();
+  }
+}
+
+function setupEventListeners() {
+  document.querySelectorAll(".nav-item").forEach(function(item) {
+    item.addEventListener("click", function() {
+      var screen = this.dataset.screen;
+      showScreen(screen);
+      if (screen === "marketplace") loadMarketplace();
+      if (screen === "points-screen") loadPoints();
+      if (screen === "support-screen") loadSupport();
+    });
+  });
+  if (tg && tg.BackButton) {
+    tg.BackButton.onClick(function() {
+      var active = document.querySelector(".screen.active");
+      if (active && active.id === "chat-screen") { showScreen("support-screen"); loadSupport(); }
+      else showScreen("dashboard");
+    });
+  }
+  var ob = 0;
+  document.getElementById("onboardNext").addEventListener("click", function() {
+    if (ob < 3) { ob++; setSlide(ob); }
+    else finishOnboarding();
+  });
+  document.getElementById("onboardBack").addEventListener("click", function() {
+    if (ob > 0) { ob--; setSlide(ob); }
+  });
+  document.getElementById("onboardSkip").addEventListener("click", finishOnboarding);
+  document.getElementById("applyDiscount").addEventListener("click", applyDiscount);
+  document.getElementById("copyWallet").addEventListener("click", function() {
+    var addr = document.getElementById("walletAddr").textContent;
+    copyText(addr, "Wallet address copied!");
+  });
+  document.getElementById("submitOrder").addEventListener("click", submitOrder);
+  document.getElementById("backToDash").addEventListener("click", function() { showScreen("dashboard"); loadDashboard(); });
+  document.getElementById("shopBtn").addEventListener("click", openShop);
+  document.getElementById("closeShopModal").addEventListener("click", function() { document.getElementById("shopModal").classList.add("hidden"); });
+  document.getElementById("confirmRedeem").addEventListener("click", doRedeem);
+  document.getElementById("cancelRedeem").addEventListener("click", function() { document.getElementById("redeemConfirmModal").classList.add("hidden"); });
+  document.getElementById("copyRef").addEventListener("click", function() {
+    copyText(document.getElementById("refLink").textContent, "Referral link copied!");
+  });
+  document.getElementById("newThreadBtn").addEventListener("click", function() { document.getElementById("newThreadModal").classList.remove("hidden"); });
+  document.getElementById("closeThreadModal").addEventListener("click", function() { document.getElementById("newThreadModal").classList.add("hidden"); });
+  document.getElementById("submitThread").addEventListener("click", submitThread);
+  document.getElementById("closePayoutModal").addEventListener("click", function() { document.getElementById("payoutModal").classList.add("hidden"); });
+  document.getElementById("submitPayout").addEventListener("click", submitPayout);
+  document.getElementById("chatBack").addEventListener("click", function() { showScreen("support-screen"); loadSupport(); });
+  document.getElementById("chatSend").addEventListener("click", sendChatMsg);
+  document.getElementById("chatInput").addEventListener("keypress", function(e) { if (e.key === "Enter") sendChatMsg(); });
+  document.getElementById("discountInput").addEventListener("input", function() { this.value = this.value.toUpperCase(); });
+}
+
+function setSlide(idx) {
+  var slides = document.querySelectorAll(".onboard-slide");
+  var dots = document.querySelectorAll(".dot");
+  slides.forEach(function(s) {
+    var si = parseInt(s.dataset.index);
+    s.classList.remove("active","prev");
+    if (si === idx) s.classList.add("active");
+    else if (si < idx) s.classList.add("prev");
+  });
+  dots.forEach(function(d, i) { d.classList.toggle("active", i === idx); });
+  document.getElementById("onboardBack").style.display = idx === 0 ? "none" : "";
+  document.getElementById("onboardNext").textContent = idx === 3 ? "Get Started" : "Next";
+}
+
+function finishOnboarding() {
+  if (state.user) call("markOnboarded", { telegramId: state.user.telegramId }, function() {});
+  enterApp();
+}
+
+function loadDashboard() {
+  var greet = document.getElementById("dashGreeting");
+  var sub = document.getElementById("dashSub");
+  if (state.user) {
+    greet.textContent = "Hey, " + (state.user.firstName || state.user.username || "Trader") + "!";
+  }
+  document.getElementById("dashContent").innerHTML = '<div class="loading-skeleton"><div class="sk-row skeleton"></div><div class="sk-row skeleton"></div><div class="sk-row skeleton"></div></div>';
+  call("getUserAccounts", { telegramId: state.user.telegramId }, function(res) {
+    if (!res.ok) { toast("Could not load accounts", "error"); return; }
+    state.accounts = res.data;
+    renderSwitcher();
+    if (state.accounts.length === 0) {
+      document.getElementById("dashContent").innerHTML = '<div class="empty-state"><div class="icon">📊</div><h3>No accounts yet</h3><p>Buy a challenge to get started on your path to a funded account.</p></div>';
+      sub.textContent = "Start your first challenge";
+    } else {
+      if (!state.currentAccount) state.currentAccount = state.accounts[0];
+      sub.textContent = state.accounts.length + " account" + (state.accounts.length > 1 ? "s" : "");
+      renderAccountDetail();
+    }
+  });
+}
+
+function renderSwitcher() {
+  var sw = document.getElementById("accountSwitcher");
+  if (state.accounts.length <= 1) { sw.innerHTML = ""; return; }
+  sw.innerHTML = state.accounts.map(function(a, i) {
+    return '<div class="acct-chip' + (state.currentAccount && a.accountId === state.currentAccount.accountId ? " active" : "") + '" data-idx="' + i + '">' + (a.planDetails ? a.planDetails.name : "Account") + ' P' + a.phase + '</div>';
+  }).join("");
+  sw.querySelectorAll(".acct-chip").forEach(function(chip) {
+    chip.addEventListener("click", function() {
+      state.currentAccount = state.accounts[parseInt(this.dataset.idx)];
+      renderSwitcher();
+      renderAccountDetail();
+    });
+  });
+}
+
+function renderAccountDetail() {
+  var a = state.currentAccount;
+  if (!a) return;
+  var plan = a.planDetails || {};
+  var html = "";
+  if (a.status === "blown") {
+    html += '<div class="blown-banner"><span style="font-size:24px">💥</span><p>This account has been blown. You can start a new challenge from the Buy tab.</p></div>';
+  } else if (a.status === "breached") {
+    html += '<div class="status-banner" style="background:#78350f22;border:1px solid #78350f"><span style="font-size:24px">⚠️</span><p style="color:var(--yellow);font-size:14px;line-height:1.5">Account breached. Please contact support.</p></div>';
+  }
+  html += renderPhaseLadder(a);
+  if (a.mt5Login) {
+    html += '<div class="creds-card"><h3>MT5 Credentials</h3>';
+    html += credRow("Login", a.mt5Login) + credRow("Password", a.mt5Password) + credRow("Server", a.mt5Server);
+    html += '</div>';
+  }
+  if (plan.name) {
+    html += '<div class="plan-stats">';
+    html += planStat("Phase 1 Target", plan.phase1Target + "%");
+    html += planStat("Phase 2 Target", plan.phase2Target + "%");
+    html += planStat("Max Drawdown", plan.maxDrawdown + "%");
+    html += planStat("Account Size", "$" + formatNum(plan.accountSize));
+    html += '</div>';
+  }
+  if (a.status === "funded" || a.status === "scaled" || a.status === "scale_ready") {
+    html += '<div class="payout-btn-wrap"><button class="btn btn-primary" id="requestPayoutBtn">Request Payout</button></div>';
+  }
+  if (a.payouts && a.payouts.length > 0) {
+    html += '<div class="payout-history"><h3>Payout History</h3>';
+    a.payouts.forEach(function(p) {
+      var traderAmt = (parseFloat(p.amount) * parseFloat(p.splitPct) / 100).toFixed(2);
+      html += '<div class="payout-item"><div class="col"><span style="font-size:14px;font-weight:600">$' + traderAmt + '</span><span style="font-size:12px;color:var(--muted)">' + fmtDate(p.createdAt) + '</span></div>' + statusBadge(p.status) + '</div>';
+    });
+    html += '</div>';
+  }
+  document.getElementById("dashContent").innerHTML = html;
+  var rpBtn = document.getElementById("requestPayoutBtn");
+  if (rpBtn) {
+    rpBtn.addEventListener("click", function() {
+      var approvedCount = (a.payouts || []).filter(function(p) { return p.status === "approved"; }).length;
+      var split = approvedCount === 0 ? "first payout split" : "subsequent payout split";
+      document.getElementById("payoutSplitInfo").textContent = "Your " + split + " applies to this payout. The platform retains a portion of earnings as per your plan.";
+      document.getElementById("payoutModal").classList.remove("hidden");
+    });
+  }
+}
+
+function renderPhaseLadder(a) {
+  var phases = [
+    { label: "Phase 1", key: "1" },
+    { label: "Phase 2", key: "2" },
+    { label: "Funded", key: "funded" },
+    { label: "Scaled", key: "scaled" }
+  ];
+  var current = String(a.phase);
+  var statusMap = { "1": 0, "2": 1, "funded": 2, "scaled": 3 };
+  var currentIdx = statusMap[current] !== undefined ? statusMap[current] : 0;
+  if (a.status === "funded" || a.status === "scale_ready") currentIdx = 2;
+  if (a.status === "scaled") currentIdx = 3;
+  var html = '<div class="phase-ladder">';
+  phases.forEach(function(ph, i) {
+    var nodeClass = i < currentIdx ? "done" : (i === currentIdx ? "current" : "locked");
+    var icon = i < currentIdx ? "✓" : (i === currentIdx ? "●" : "○");
+    html += '<div class="phase-step"><div class="phase-node ' + nodeClass + '">' + icon + '</div><div class="phase-label">' + ph.label + '</div></div>';
+    if (i < phases.length - 1) {
+      html += '<div class="phase-line' + (i < currentIdx ? " done" : "") + '"></div>';
+    }
+  });
+  html += '</div>';
+  return html;
+}
+
+function credRow(label, val) {
+  var id = "cred_" + label.toLowerCase().replace(/\s/g, "_");
+  return '<div class="cred-row"><span style="font-size:12px;color:var(--muted);width:64px;flex-shrink:0">' + label + '</span><div class="cred-val" id="' + id + '">' + val + '</div><button class="copy-btn" onclick="copyText(\'' + val + '\',\'' + label + ' copied!\')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></div>';
+}
+
+function planStat(label, val) {
+  return '<div class="plan-stat"><div class="label">' + label + '</div><div class="value">' + val + '</div></div>';
+}
+
+function loadMarketplace() {
+  state.selectedPlan = null;
+  state.discount = null;
+  document.getElementById("orderSummary").style.display = "none";
+  document.getElementById("discountSection").style.display = "none";
+  document.getElementById("walletSection").style.display = "none";
+  document.getElementById("paymentSection").style.display = "none";
+  document.getElementById("orderConfirm").style.display = "none";
+  document.getElementById("discountInput").value = "";
+  document.getElementById("discountMsg").textContent = "";
+  document.getElementById("plansList").innerHTML = '<div class="loading-skeleton"><div class="sk-row skeleton"></div><div class="sk-row skeleton"></div></div>';
+  call("getPlans", {}, function(res) {
+    if (!res.ok || !res.data.length) {
+      document.getElementById("plansList").innerHTML = '<div class="empty-state"><div class="icon">📭</div><h3>No plans available</h3><p>Check back soon for new challenge plans.</p></div>';
+      return;
+    }
+    document.getElementById("plansList").innerHTML = res.data.map(function(p) {
+      return '<div class="plan-card" data-id="' + p.planId + '">' +
+        '<div class="plan-card-top"><span class="plan-size">$' + formatNum(p.accountSize) + '</span><span class="plan-price">$' + p.price + '</span></div>' +
+        '<div class="plan-row"><span class="plan-tag">P1: ' + p.phase1Target + '%</span><span class="plan-tag">P2: ' + p.phase2Target + '%</span><span class="plan-tag">DD: ' + p.maxDrawdown + '%</span><span class="plan-tag">Split: ' + p.payoutSplit1 + '%</span></div>' +
+        '<div style="font-size:13px;color:var(--accent2);margin-top:6px;font-weight:600">' + p.name + '</div></div>';
+    }).join("");
+    document.querySelectorAll(".plan-card").forEach(function(card) {
+      card.addEventListener("click", function() {
+        document.querySelectorAll(".plan-card").forEach(function(c) { c.classList.remove("selected"); });
+        this.classList.add("selected");
+        var plan = res.data.find(function(p) { return p.planId === card.dataset.id; });
+        state.selectedPlan = plan;
+        updateOrderSummary();
+        document.getElementById("orderSummary").style.display = "block";
+        document.getElementById("discountSection").style.display = "block";
+        call("getSettings", {}, function(sr) {
+          if (sr.ok) {
+            document.getElementById("walletAddr").textContent = sr.data.walletAddress || "Wallet address not configured";
+            document.getElementById("walletSection").style.display = "block";
+            document.getElementById("paymentSection").style.display = "block";
+          }
+        });
+      });
+    });
+  });
+}
+
+function updateOrderSummary() {
+  var p = state.selectedPlan;
+  if (!p) return;
+  var price = parseFloat(p.price);
+  var discAmt = state.discount ? (price * state.discount.pct / 100) : 0;
+  var total = price - discAmt;
+  var html = '<div class="summary-row"><span>' + p.name + '</span><span>$' + price.toFixed(2) + '</span></div>';
+  if (state.discount) html += '<div class="summary-row"><span style="color:var(--green)">Discount (' + state.discount.pct + '%)</span><span style="color:var(--green)">-$' + discAmt.toFixed(2) + '</span></div>';
+  html += '<div class="summary-row total"><span>Total</span><span>$' + total.toFixed(2) + '</span></div>';
+  document.getElementById("summaryContent").innerHTML = html;
+}
+
+function applyDiscount() {
+  var code = document.getElementById("discountInput").value.trim().toUpperCase();
+  if (!code) return;
+  call("validateDiscount", { code: code }, function(res) {
+    if (res.ok) {
+      state.discount = { code: code, pct: parseFloat(res.data.discountPct) };
+      document.getElementById("discountMsg").innerHTML = '<span style="color:var(--green)">✓ ' + res.data.discountPct + '% discount applied</span>';
+      updateOrderSummary();
+    } else {
+      state.discount = null;
+      document.getElementById("discountMsg").innerHTML = '<span style="color:var(--red)">✗ ' + res.error + '</span>';
+      updateOrderSummary();
+    }
+  });
+}
+
+function submitOrder() {
+  if (!state.user) { toast("Not logged in", "error"); return; }
+  if (!state.selectedPlan) { toast("Select a plan first", "error"); return; }
+  var ref = document.getElementById("paymentRef").value.trim();
+  if (!ref) { toast("Enter your payment reference", "error"); return; }
+  var btn = document.getElementById("submitOrder");
+  btn.disabled = true; btn.textContent = "Submitting...";
+  call("submitOrder", {
+    telegramId: state.user.telegramId, planId: state.selectedPlan.planId,
+    paymentRef: ref, discountCode: state.discount ? state.discount.code : "",
+    username: state.user.username
+  }, function(res) {
+    btn.disabled = false; btn.textContent = "Submit Payment";
+    if (res.ok) {
+      document.getElementById("plansList").style.display = "none";
+      document.getElementById("orderSummary").style.display = "none";
+      document.getElementById("discountSection").style.display = "none";
+      document.getElementById("walletSection").style.display = "none";
+      document.getElementById("paymentSection").style.display = "none";
+      document.getElementById("orderConfirm").style.display = "block";
+    } else {
+      toast(res.error || "Order failed", "error");
+    }
+  });
+}
+
+function loadPoints() {
+  document.getElementById("ptsBalance").textContent = "...";
+  document.getElementById("ledgerList").innerHTML = '<div class="loading-skeleton"><div class="sk-row skeleton"></div><div class="sk-row skeleton"></div></div>';
+  call("getPoints", { telegramId: state.user.telegramId }, function(res) {
+    if (!res.ok) return;
+    state.points = res.data.balance;
+    document.getElementById("ptsBalance").textContent = Math.round(res.data.balance).toLocaleString();
+    if (res.data.ledger.length === 0) {
+      document.getElementById("ledgerList").innerHTML = '<div class="empty-state"><div class="icon">⭐</div><h3>No points yet</h3><p>Earn points by referring friends.</p></div>';
+    } else {
+      document.getElementById("ledgerList").innerHTML = res.data.ledger.slice().reverse().map(function(e) {
+        var isEarn = parseFloat(e.amount) > 0;
+        return '<div class="ledger-item"><div class="col"><span style="font-size:14px;font-weight:500">' + e.description + '</span><span style="font-size:12px;color:var(--muted)">' + fmtDate(e.createdAt) + '</span></div><span class="ledger-amount ' + (isEarn ? "earn" : "spend") + '">' + (isEarn ? "+" : "") + Math.round(e.amount) + '</span></div>';
+      }).join("");
+    }
+  });
+  call("getReferrals", { telegramId: state.user.telegramId }, function(res) {
+    if (!res.ok) return;
+    document.getElementById("refList").innerHTML = res.data.length === 0
+      ? '<div style="padding:16px;color:var(--muted);font-size:14px">No referrals yet. Share your code to earn points.</div>'
+      : res.data.map(function(r) {
+        return '<div class="ref-item"><div class="col"><span style="font-size:14px;font-weight:500">' + (r.refereeName || r.refereeTelegramId) + '</span><span style="font-size:12px;color:var(--muted)">' + fmtDate(r.createdAt) + '</span></div>' + statusBadge(r.status) + '</div>';
+      }).join("");
+  });
+  call("getUser", { telegramId: state.user.telegramId }, function(res) {
+    if (!res.ok) return;
+    var u = res.data;
+    document.getElementById("userRefCode").textContent = u.referralCode;
+    var botLink = "https://t.me/NowFundedBot?start=" + u.referralCode;
+    document.getElementById("refLink").textContent = botLink;
+  });
+}
+
+function openShop() {
+  document.getElementById("shopGrid").innerHTML = '<div style="padding:16px;color:var(--muted)">Loading...</div>';
+  document.getElementById("shopModal").classList.remove("hidden");
+  call("getDiscountShop", { telegramId: state.user.telegramId }, function(res) {
+    if (!res.ok) return;
+    if (res.data.items.length === 0) {
+      document.getElementById("shopGrid").innerHTML = '<div style="padding:16px;color:var(--muted)">No items available.</div>';
+      return;
+    }
+    document.getElementById("shopGrid").innerHTML = res.data.items.map(function(item) {
+      return '<div class="shop-item' + (!item.canAfford ? " cant-afford" : "") + '" data-plan="' + item.planId + '" data-cost="' + item.pointsCost + '" data-name="' + item.name + '">' +
+        '<h4>' + item.name + '</h4>' +
+        '<div class="cost">' + item.pointsCost + '</div><div class="cost-label">points</div>' +
+        '<div class="disc">-' + item.discountPct + '% off</div>' +
+        (item.canAfford ? '' : '<div style="font-size:11px;color:var(--red);margin-top:4px">Not enough points</div>') +
+        '</div>';
+    }).join("");
+    document.querySelectorAll(".shop-item:not(.cant-afford)").forEach(function(el) {
+      el.addEventListener("click", function() {
+        var planId = this.dataset.plan;
+        var cost = this.dataset.cost;
+        var name = this.dataset.name;
+        document.getElementById("redeemConfirmText").textContent = "Redeem " + cost + " points for a 10% discount on the " + name + " challenge? This will generate a one-time use code.";
+        document.getElementById("confirmRedeem").dataset.plan = planId;
+        document.getElementById("shopModal").classList.add("hidden");
+        document.getElementById("redeemConfirmModal").classList.remove("hidden");
+      });
+    });
+  });
+}
+
+function doRedeem() {
+  var planId = document.getElementById("confirmRedeem").dataset.plan;
+  call("redeemPoints", { telegramId: state.user.telegramId, planId: planId }, function(res) {
+    document.getElementById("redeemConfirmModal").classList.add("hidden");
+    if (res.ok) {
+      toast("Code generated: " + res.data.code + " — " + res.data.discountPct + "% off!", "success");
+      loadPoints();
+    } else {
+      toast(res.error || "Redemption failed", "error");
+    }
+  });
+}
+
+function loadSupport() {
+  document.getElementById("threadsList").innerHTML = '<div class="loading-skeleton"><div class="sk-row skeleton"></div><div class="sk-row skeleton"></div></div>';
+  call("getThreads", { telegramId: state.user.telegramId }, function(res) {
+    if (!res.ok) return;
+    if (res.data.length === 0) {
+      document.getElementById("threadsList").innerHTML = '<div class="empty-state"><div class="icon">💬</div><h3>No support tickets</h3><p>Tap the button above to open a new support request.</p></div>';
+      return;
+    }
+    document.getElementById("threadsList").innerHTML = res.data.slice().reverse().map(function(t) {
+      return '<div class="thread-item" data-id="' + t.threadId + '"><div class="row"><span class="thread-subject">' + t.subject + '</span>' + statusBadge(t.status) + '</div><div class="thread-meta">' + fmtDate(t.updatedAt) + '</div></div>';
+    }).join("");
+    document.querySelectorAll(".thread-item").forEach(function(el) {
+      el.addEventListener("click", function() { openThread(this.dataset.id); });
+    });
+  });
+}
+
+function openThread(threadId) {
+  state.currentThread = threadId;
+  showScreen("chat-screen");
+  document.getElementById("messagesList").innerHTML = '<div style="padding:20px;color:var(--muted)">Loading...</div>';
+  call("getThread", { threadId: threadId }, function(res) {
+    if (!res.ok) return;
+    var t = res.data;
+    document.getElementById("chatSubject").textContent = t.subject;
+    document.getElementById("chatStatus").textContent = t.status === "open" ? "Open" : "Closed";
+    if (t.status === "closed") {
+      document.getElementById("chatInputBar").style.display = "none";
+    } else {
+      document.getElementById("chatInputBar").style.display = "flex";
+    }
+    document.getElementById("messagesList").innerHTML = (t.messages || []).map(function(m) {
+      var isTrader = m.senderRole === "trader";
+      return '<div style="display:flex;flex-direction:column;align-items:' + (isTrader ? "flex-end" : "flex-start") + '"><div class="message-bubble ' + m.senderRole + '">' + escHtml(m.body) + '<div class="msg-time">' + fmtDate(m.createdAt) + '</div></div></div>';
+    }).join("");
+    var ml = document.getElementById("messagesList");
+    ml.scrollTop = ml.scrollHeight;
+  });
+}
+
+function submitThread() {
+  var subject = document.getElementById("threadSubject").value.trim();
+  var body = document.getElementById("threadBody").value.trim();
+  if (!subject || !body) { toast("Fill in all fields", "error"); return; }
+  call("createThread", { telegramId: state.user.telegramId, subject: subject, body: body, username: state.user.username }, function(res) {
+    document.getElementById("newThreadModal").classList.add("hidden");
+    if (res.ok) {
+      toast("Support request sent", "success");
+      document.getElementById("threadSubject").value = "";
+      document.getElementById("threadBody").value = "";
+      loadSupport();
+    } else {
+      toast(res.error || "Failed to send", "error");
+    }
+  });
+}
+
+function sendChatMsg() {
+  var body = document.getElementById("chatInput").value.trim();
+  if (!body || !state.currentThread) return;
+  document.getElementById("chatInput").value = "";
+  call("sendMessage", { telegramId: state.user.telegramId, threadId: state.currentThread, body: body, username: state.user.username }, function(res) {
+    if (res.ok) openThread(state.currentThread);
+    else toast("Failed to send message", "error");
+  });
+}
+
+function submitPayout() {
+  var amount = document.getElementById("payoutAmount").value.trim();
+  var wallet = document.getElementById("payoutWallet").value.trim();
+  if (!amount || !wallet) { toast("Fill in all fields", "error"); return; }
+  if (!state.currentAccount) { toast("No account selected", "error"); return; }
+  var btn = document.getElementById("submitPayout");
+  btn.disabled = true; btn.textContent = "Requesting...";
+  call("requestPayout", {
+    telegramId: state.user.telegramId, accountId: state.currentAccount.accountId,
+    amount: amount, walletAddress: wallet, username: state.user.username
+  }, function(res) {
+    btn.disabled = false; btn.textContent = "Request Payout";
+    document.getElementById("payoutModal").classList.add("hidden");
+    if (res.ok) {
+      toast("Payout request submitted!", "success");
+      document.getElementById("payoutAmount").value = "";
+      document.getElementById("payoutWallet").value = "";
+      loadDashboard();
+    } else {
+      toast(res.error || "Request failed", "error");
+    }
+  });
+}
+
+function call(action, params, cb) {
+  if (!API) { cb({ ok: false, error: "API not configured" }); return; }
+  params.action = action;
+  fetch(API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params)
+  }).then(function(r) { return r.json(); }).then(cb).catch(function() { cb({ ok: false, error: "Network error" }); });
+}
+
+function toast(msg, type) {
+  var c = document.getElementById("toastContainer");
+  var el = document.createElement("div");
+  el.className = "toast " + (type || "info");
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 3500);
+}
+
+function copyText(text, msg) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() { toast(msg || "Copied!", "success"); });
+  } else {
+    var ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+    toast(msg || "Copied!", "success");
+  }
+}
+
+function formatNum(n) {
+  var num = parseFloat(n);
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+  if (num >= 1000) return (num / 1000).toFixed(0) + "K";
+  return num.toString();
+}
+
+function fmtDate(d) {
+  if (!d) return "";
+  try { return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); }
+  catch(e) { return d; }
+}
+
+function statusBadge(status) {
+  var map = {
+    pending: "badge-yellow", confirmed: "badge-green", rejected: "badge-red",
+    active: "badge-purple", funded: "badge-green", blown: "badge-red",
+    breached: "badge-yellow", scaled: "badge-green", scale_ready: "badge-purple",
+    approved: "badge-green", open: "badge-purple", closed: "badge-gray",
+    converted: "badge-green", passed: "badge-green"
+  };
+  return '<span class="badge ' + (map[status] || "badge-gray") + '">' + status + '</span>';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+window.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
