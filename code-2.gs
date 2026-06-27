@@ -1,4 +1,4 @@
-var SHEET_NAMES= {
+var SHEET_NAMES = {
   users: "Users",
   orders: "Orders",
   accounts: "Accounts",

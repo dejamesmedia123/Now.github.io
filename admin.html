@@ -399,7 +399,7 @@ input:checked+.toggle-slider:before{transform:translateX(18px)}
 </div>
 
 <script>
-var API = "https://script.google.com/macros/s/AKfycbxtxW3S5VxqvRQdXaEWGpAPKv9ltJ7qLF0uTeSEPkWJgw6ROr9LGQPJRPrKeMDQjMwk/exec";
+var API = "https://script.google.com/macros/s/AKfycbw_vWPIrofq-uCSzLfu51Z42j0iRtTUaniVCUr9fNvyldO_15GpF_xXyznxYwISUqM9/exec";
 var token = sessionStorage.getItem("nf_admin_token") || "";
 var badgeInterval = null;
 var currentCredAccountId = "";
@@ -890,7 +890,8 @@ function loadSettings() {
       { key: "referralPoints", label: "Referral Points Awarded", type: "number" },
       { key: "blownRefundEnabled", label: "Blown Account Refund (true/false)", type: "text" },
       { key: "blownRefundPct", label: "Blown Refund % as Points", type: "number" },
-      { key: "appUrl", label: "Trader App URL (for deep links)", type: "text" }
+      { key: "appUrl", label: "Trader App URL (for deep links)", type: "text" },
+      { key: "botUsername", label: "Telegram Bot Username (without @)", type: "text" }
     ];
     document.getElementById("settingsForm").innerHTML = fields.map(function(f) {
       return '<div style="display:flex;flex-direction:column;gap:6px"><label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">' + f.label + '</label><div style="display:flex;gap:8px"><input class="input" type="' + f.type + '" id="set_' + f.key + '" value="' + escHtml(d[f.key] || "") + '" style="flex:1"><button class="btn btn-ghost btn-sm save-setting" data-key="' + f.key + '">Save</button></div></div>';

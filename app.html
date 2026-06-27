@@ -452,9 +452,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter'
 </div>
 
 <script>
-var API = "https://script.google.com/macros/s/AKfycbxtxW3S5VxqvRQdXaEWGpAPKv9ltJ7qLF0uTeSEPkWJgw6ROr9LGQPJRPrKeMDQjMwk/exec";
+var API = "https://script.google.com/macros/s/AKfycbw_vWPIrofq-uCSzLfu51Z42j0iRtTUaniVCUr9fNvyldO_15GpF_xXyznxYwISUqM9/exec";
 var tg = window.Telegram && window.Telegram.WebApp;
-var state = { user: null, accounts: [], currentAccount: null, currentThread: null, selectedPlan: null, discount: null, points: 0 };
+var state = { user: null, accounts: [], currentAccount: null, currentThread: null, selectedPlan: null, discount: null, points: 0, botUsername: "NowFundedBot" };
 
 function init() {
   if (document.getElementById("app").dataset.api) {
@@ -482,7 +482,9 @@ function init() {
       if (res.ok) {
         state.user = res.data.user;
         if (res.data.isNew || state.user.onboarded !== "true") {
-          showScreen("onboarding");
+          showScreen("landing");
+          document.getElementById("landingCTA").onclick = function() { showScreen("onboarding"); };
+          document.getElementById("landingCTA2").onclick = function() { showScreen("onboarding"); };
         } else {
           enterApp();
         }
@@ -509,6 +511,9 @@ function loadPublicStats() {
 }
 
 function enterApp() {
+  call("getWalletAddress", {}, function(r) {
+    if (r.ok && r.data.botUsername) state.botUsername = r.data.botUsername;
+  });
   showScreen("dashboard");
   document.getElementById("mainNav").style.display = "flex";
   loadDashboard();
@@ -561,6 +566,21 @@ function setupEventListeners() {
     if (ob > 0) { ob--; setSlide(ob); }
   });
   document.getElementById("onboardSkip").addEventListener("click", finishOnboarding);
+  var touchStartX = 0;
+  document.getElementById("onboardSlides").addEventListener("touchstart", function(e) { touchStartX = e.touches[0].clientX; }, { passive: true });
+  document.getElementById("onboardSlides").addEventListener("touchend", function(e) {
+    var diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) {
+      if (diff > 0 && ob < 3) { ob++; setSlide(ob); }
+      else if (diff < 0 && ob > 0) { ob--; setSlide(ob); }
+    }
+  }, { passive: true });
+  document.addEventListener("keydown", function(e) {
+    var active = document.querySelector(".screen.active");
+    if (!active || active.id !== "onboarding") return;
+    if (e.key === "ArrowRight" && ob < 3) { ob++; setSlide(ob); }
+    if (e.key === "ArrowLeft" && ob > 0) { ob--; setSlide(ob); }
+  });
   document.getElementById("applyDiscount").addEventListener("click", applyDiscount);
   document.getElementById("copyWallet").addEventListener("click", function() {
     var addr = document.getElementById("walletAddr").textContent;
@@ -646,6 +666,7 @@ function renderAccountDetail() {
   var a = state.currentAccount;
   if (!a) return;
   var plan = a.planDetails || {};
+  if (typeof plan === "string") { try { plan = JSON.parse(plan); } catch(e) { plan = {}; } }
   var html = "";
   if (a.status === "blown") {
     html += '<div class="blown-banner"><span style="font-size:24px">💥</span><p>This account has been blown. You can start a new challenge from the Buy tab.</p></div>';
@@ -683,7 +704,8 @@ function renderAccountDetail() {
     rpBtn.addEventListener("click", function() {
       var approvedCount = (a.payouts || []).filter(function(p) { return p.status === "approved"; }).length;
       var split = approvedCount === 0 ? "first payout split" : "subsequent payout split";
-      document.getElementById("payoutSplitInfo").textContent = "Your " + split + " applies to this payout. The platform retains a portion of earnings as per your plan.";
+      var splitPct = approvedCount === 0 ? (a.planDetails.payoutSplit1 || "—") : (a.planDetails.payoutSplitN || "—");
+      document.getElementById("payoutSplitInfo").innerHTML = "You keep <strong style='color:var(--accent2)'>" + splitPct + "%</strong> of this payout (" + (approvedCount === 0 ? "first payout rate" : "repeat payout rate") + ").";
       document.getElementById("payoutModal").classList.remove("hidden");
     });
   }
@@ -726,6 +748,8 @@ function planStat(label, val) {
 function loadMarketplace() {
   state.selectedPlan = null;
   state.discount = null;
+  document.querySelector(".market-header").style.display = "block";
+  document.getElementById("plansList").style.display = "block";
   document.getElementById("orderSummary").style.display = "none";
   document.getElementById("discountSection").style.display = "none";
   document.getElementById("walletSection").style.display = "none";
@@ -754,7 +778,7 @@ function loadMarketplace() {
         updateOrderSummary();
         document.getElementById("orderSummary").style.display = "block";
         document.getElementById("discountSection").style.display = "block";
-        call("getSettings", {}, function(sr) {
+        call("getWalletAddress", {}, function(sr) {
           if (sr.ok) {
             document.getElementById("walletAddr").textContent = sr.data.walletAddress || "Wallet address not configured";
             document.getElementById("walletSection").style.display = "block";
@@ -814,6 +838,7 @@ function submitOrder() {
       document.getElementById("walletSection").style.display = "none";
       document.getElementById("paymentSection").style.display = "none";
       document.getElementById("orderConfirm").style.display = "block";
+      document.querySelector(".market-header").style.display = "none";
     } else {
       toast(res.error || "Order failed", "error");
     }
@@ -838,17 +863,33 @@ function loadPoints() {
   });
   call("getReferrals", { telegramId: state.user.telegramId }, function(res) {
     if (!res.ok) return;
-    document.getElementById("refList").innerHTML = res.data.length === 0
-      ? '<div style="padding:16px;color:var(--muted);font-size:14px">No referrals yet. Share your code to earn points.</div>'
-      : res.data.map(function(r) {
-        return '<div class="ref-item"><div class="col"><span style="font-size:14px;font-weight:500">' + (r.refereeName || r.refereeTelegramId) + '</span><span style="font-size:12px;color:var(--muted)">' + fmtDate(r.createdAt) + '</span></div>' + statusBadge(r.status) + '</div>';
+    if (!res.data.length) {
+      document.getElementById("refList").innerHTML = '<div style="padding:16px;color:var(--muted);font-size:14px">No referrals yet. Share your code to earn points.</div>';
+      return;
+    }
+    var converted = res.data.filter(function(r) { return r.status === "converted"; });
+    var pending = res.data.filter(function(r) { return r.status === "pending"; });
+    var html = "";
+    if (converted.length) {
+      html += '<div style="padding:0 0 6px;font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.05em">✓ Purchased (' + converted.length + ')</div>';
+      html += converted.map(function(r) {
+        return '<div class="ref-item"><div class="col"><span style="font-size:14px;font-weight:600">' + escHtml(r.refereeName || r.refereeTelegramId) + '</span><span style="font-size:12px;color:var(--muted)">' + fmtDate(r.createdAt) + '</span></div><div class="col" style="align-items:flex-end"><span class="badge badge-green">Converted</span><span style="font-size:12px;color:var(--accent2);font-weight:700">+' + r.pointsAwarded + ' pts</span></div></div>';
       }).join("");
+    }
+    if (pending.length) {
+      if (converted.length) html += '<div style="height:1px;background:var(--border);margin:8px 0"></div>';
+      html += '<div style="padding:0 0 6px;font-size:11px;font-weight:700;color:var(--yellow);text-transform:uppercase;letter-spacing:.05em">⏳ Not yet purchased (' + pending.length + ')</div>';
+      html += pending.map(function(r) {
+        return '<div class="ref-item"><div class="col"><span style="font-size:14px;font-weight:500">' + escHtml(r.refereeName || r.refereeTelegramId) + '</span><span style="font-size:12px;color:var(--muted)">' + fmtDate(r.createdAt) + '</span></div><span class="badge badge-yellow">Pending</span></div>';
+      }).join("");
+    }
+    document.getElementById("refList").innerHTML = html;
   });
   call("getUser", { telegramId: state.user.telegramId }, function(res) {
     if (!res.ok) return;
     var u = res.data;
     document.getElementById("userRefCode").textContent = u.referralCode;
-    var botLink = "https://t.me/NowFundedBot?start=" + u.referralCode;
+    var botLink = (state.botUsername ? "https://t.me/" + state.botUsername + "?start=" : "https://t.me/NowFundedBot?start=") + u.referralCode;
     document.getElementById("refLink").textContent = botLink;
   });
 }
