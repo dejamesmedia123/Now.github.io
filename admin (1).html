@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NowFunded Admin</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#07070f;
+  --surface:rgba(255,255,255,0.04);
+  --surface2:rgba(255,255,255,0.07);
+  --surface3:rgba(255,255,255,0.11);
+  --border:rgba(255,255,255,0.08);
+  --border-accent:rgba(124,109,250,0.25);
+  --accent:#7c6dfa;
+  --accent2:#a78bfa;
+  --green:#22c55e;
+  --green-bg:rgba(34,197,94,0.12);
+  --red:#ef4444;
+  --red-bg:rgba(239,68,68,0.12);
+  --yellow:#f59e0b;
+  --yellow-bg:rgba(245,158,11,0.12);
+  --text:#f1f0ff;
+  --muted:#6b6b8a;
+  --nav:64px;
+  --radius:14px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;overflow:hidden}
+
+/* BG orbs */
+.orb{position:fixed;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0}
+.orb1{width:280px;height:280px;background:rgba(124,109,250,0.1);top:-60px;right:-60px}
+.orb2{width:200px;height:200px;background:rgba(167,139,250,0.06);bottom:80px;left:-40px}
+
+/* ── LOGIN ── */
+#loginScreen{position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-card{background:rgba(255,255,255,0.04);border:1px solid var(--border-accent);border-radius:24px;padding:32px 24px;width:100%;max-width:360px;text-align:center;backdrop-filter:blur(20px)}
+.login-logo{width:72px;height:72px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 20px;box-shadow:0 0 40px rgba(124,109,250,0.4)}
+.login-card h1{font-size:24px;font-weight:900;letter-spacing:-0.02em;margin-bottom:4px}
+.login-card p{color:var(--muted);font-size:14px;margin-bottom:28px}
+.login-error{color:var(--red);font-size:13px;margin-top:12px;min-height:18px;font-weight:500}
+
+/* ── APP SHELL ── */
+#appShell{height:100%;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:1;display:none}
+
+/* ── TOP BAR ── */
+.topbar{height:56px;background:rgba(10,10,20,0.8);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:relative;z-index:10}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.topbar-logo{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.topbar-title{font-size:16px;font-weight:800;letter-spacing:-0.01em}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.icon-btn{width:36px;height:36px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .2s}
+.icon-btn:active{background:var(--surface3);color:var(--text)}
+.notif-dot{position:relative}
+.notif-dot::after{content:'';position:absolute;top:6px;right:6px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--bg)}
+
+/* ── PANELS ── */
+.panels{flex:1;overflow:hidden;position:relative}
+.panel{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:16px 16px calc(var(--nav) + 20px);display:none;flex-direction:column;gap:12px}
+.panel.active{display:flex}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{height:var(--nav);background:rgba(10,10,20,0.9);backdrop-filter:blur(24px);border-top:1px solid var(--border);display:flex;flex-shrink:0;position:relative;z-index:10}
+.nav-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:var(--muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;transition:color .2s;position:relative;padding-bottom:4px}
+.nav-tab svg{width:20px;height:20px;transition:transform .2s}
+.nav-tab.active{color:var(--accent2)}
+.nav-tab.active svg{transform:scale(1.1)}
+.nav-tab-badge{position:absolute;top:6px;right:calc(50% - 18px);background:var(--red);color:#fff;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;display:none}
+
+/* ── CARDS ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;backdrop-filter:blur(16px);position:relative;overflow:hidden}
+.card-accent{border-color:var(--border-accent)}
+
+/* ── STATS GRID ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(124,109,250,0.05),transparent);pointer-events:none}
+.stat-num{font-size:28px;font-weight:900;letter-spacing:-0.03em;line-height:1}
+.stat-num.green{color:var(--green)}
+.stat-num.red{color:var(--red)}
+.stat-num.yellow{color:var(--yellow)}
+.stat-num.purple{color:var(--accent2)}
+.stat-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-top:6px}
+
+/* ── SECTION HEADER ── */
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.section-head h2{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
+
+/* ── ORDER / ACCOUNT CARDS ── */
+.item-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;transition:border-color .2s}
+.item-card:active{border-color:var(--border-accent)}
+.item-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.item-name{font-size:15px;font-weight:700}
+.item-sub{font-size:12px;color:var(--muted);font-weight:500;margin-top:2px}
+.item-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.meta-chip{font-size:11px;background:var(--surface2);border:1px solid var(--border);padding:3px 8px;border-radius:6px;color:var(--muted);font-weight:600}
+.item-actions{display:flex;gap:8px;flex-wrap:wrap}
+.item-ref{font-family:'Courier New',monospace;font-size:11px;color:var(--accent2);background:rgba(124,109,250,0.08);padding:8px 10px;border-radius:8px;word-break:break-all;margin-bottom:12px;border:1px solid rgba(124,109,250,0.15);line-height:1.5}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:active{transform:scale(.97);opacity:.85}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 3px 14px rgba(124,109,250,0.3)}
+.btn-green{background:var(--green-bg);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
+.btn-red{background:var(--red-bg);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
+.btn-yellow{background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(245,158,11,0.25)}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-sm{padding:7px 12px;font-size:12px}
+.btn-full{width:100%}
+.btn-icon{width:36px;height:36px;padding:0;border-radius:9px}
+
+/* ── INPUTS ── */
+.input{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;width:100%;outline:none;transition:all .2s;font-family:'Inter',sans-serif}
+.input:focus{border-color:var(--accent);background:rgba(124,109,250,0.07);box-shadow:0 0 0 3px rgba(124,109,250,0.1)}
+.input::placeholder{color:var(--muted)}
+select.input{appearance:none;cursor:pointer}
+.input-group{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.input-group label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em}
+.input-sm{padding:8px 12px;font-size:13px}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em}
+.badge-green{background:var(--green-bg);color:var(--green);border:1px solid rgba(34,197,94,0.25)}
+.badge-red{background:var(--red-bg);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
+.badge-yellow{background:var(--yellow-bg);color:var(--yellow);border:1px solid rgba(245,158,11,0.25)}
+.badge-purple{background:rgba(124,109,250,0.12);color:var(--accent2);border:1px solid rgba(124,109,250,0.25)}
+.badge-gray{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
+
+/* ── TOGGLE ── */
+.toggle{position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:12px;transition:.3s}
+.toggle-slider:before{content:"";position:absolute;width:18px;height:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s}
+input:checked+.toggle-slider{background:var(--accent)}
+input:checked+.toggle-slider:before{transform:translateX(20px)}
+
+/* ── FILTER ROW ── */
+.filter-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.filter-row::-webkit-scrollbar{display:none}
+.filter-chip{flex-shrink:0;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;background:var(--surface2);border:1px solid var(--border);color:var(--muted);transition:all .2s}
+.filter-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ── MODAL (bottom sheet) ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:flex-end;backdrop-filter:blur(4px)}
+.modal-overlay.hidden{display:none}
+.modal{background:rgba(13,12,24,0.98);border-radius:22px 22px 0 0;padding:24px 20px 40px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border-accent);border-bottom:none}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px}
+.modal h2{font-size:18px;font-weight:800;margin-bottom:18px;letter-spacing:-0.01em}
+.modal-actions{display:flex;gap:10px;margin-top:20px}
+.modal-actions .btn{flex:1}
+
+/* ── TOAST ── */
+.toast-container{position:fixed;top:16px;left:16px;right:16px;z-index:999;pointer-events:none;display:flex;flex-direction:column;gap:8px}
+.toast{padding:13px 16px;border-radius:12px;font-size:13px;font-weight:600;animation:toastIn .3s ease;backdrop-filter:blur(20px);display:flex;align-items:center;gap:8px}
+.toast.success{background:rgba(20,83,45,0.9);color:#86efac;border:1px solid rgba(34,197,94,0.3)}
+.toast.error{background:rgba(127,29,29,0.9);color:#fca5a5;border:1px solid rgba(239,68,68,0.3)}
+.toast.info{background:rgba(30,27,75,0.9);color:#c4b5fd;border:1px solid rgba(124,109,250,0.3)}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:44px 20px;color:var(--muted)}
+.empty-icon{font-size:44px;margin-bottom:12px}
+.empty h3{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
+.empty p{font-size:14px;line-height:1.5}
+
+/* ── SKELETON ── */
+.skeleton{background:linear-gradient(90deg,var(--surface) 25%,var(--surface2) 50%,var(--surface) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:10px}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.sk-card{height:120px;border-radius:var(--radius)}
+
+/* ── CHAT ── */
+.chat-msgs{display:flex;flex-direction:column;gap:8px;padding:4px 0 12px;max-height:260px;overflow-y:auto}
+.msg-bubble{max-width:82%;padding:10px 13px;border-radius:14px;font-size:13px;line-height:1.5}
+.msg-bubble.trader{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.msg-bubble.admin{background:var(--surface2);border:1px solid var(--border);align-self:flex-start;border-bottom-left-radius:4px}
+.msg-time{font-size:10px;color:rgba(255,255,255,.5);margin-top:3px}
+.msg-bubble.admin .msg-time{color:var(--muted)}
+
+/* ── SETTINGS ROW ── */
+.setting-row{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)}
+.setting-row:last-child{border-bottom:none}
+.setting-info{flex:1}
+.setting-info label{font-size:13px;font-weight:600;display:block;margin-bottom:2px}
+.setting-info span{font-size:11px;color:var(--muted)}
+
+/* ── PAYOUT CARD ── */
+.payout-amount{font-size:22px;font-weight:900;color:var(--green);letter-spacing:-0.02em}
+.wallet-addr{font-family:'Courier New',monospace;font-size:11px;color:var(--accent2);background:rgba(124,109,250,0.08);padding:8px 10px;border-radius:8px;word-break:break-all;border:1px solid rgba(124,109,250,0.15);margin:8px 0}
+
+/* ── USER DETAIL ── */
+.user-stat-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.user-stat{background:var(--surface2);border-radius:10px;padding:12px;border:1px solid var(--border)}
+.user-stat .lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px}
+.user-stat .val{font-size:16px;font-weight:800}
+
+/* ── DIVIDER ── */
+.divider{height:1px;background:var(--border);margin:4px 0}
+
+/* ── CRED DISPLAY ── */
+.cred-item{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.cred-label-txt{font-size:11px;color:var(--muted);width:60px;flex-shrink:0;font-weight:600}
+.cred-val-txt{font-family:'Courier New',monospace;font-size:12px;color:var(--accent2);background:rgba(124,109,250,0.08);padding:5px 8px;border-radius:7px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid rgba(124,109,250,0.15)}
+</style>
+</head>
+<body>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">🔐</div>
+    <h1>NowFunded</h1>
+    <p>Admin access only</p>
+    <div class="input-group" style="text-align:left">
+      <label>Password</label>
+      <input class="input" type="password" id="loginPass" placeholder="Enter admin password">
+    </div>
+    <button class="btn btn-primary btn-full" id="loginBtn">Sign In</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appShell">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">🚀</div>
+      <span class="topbar-title">NowFunded Admin</span>
+    </div>
+    <div class="topbar-right">
+      <div class="icon-btn" id="logoutBtn" title="Logout">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="panels">
+
+    <!-- OVERVIEW -->
+    <div class="panel active" id="panel-overview">
+      <div class="stats-grid" id="overviewStats">
+        <div class="stat-card"><div class="stat-num skeleton" style="height:32px;width:60px;margin-bottom:8px"></div><div class="stat-label">Total Users</div></div>
+        <div class="stat-card"><div class="stat-num skeleton" style="height:32px;width:60px;margin-bottom:8px"></div><div class="stat-label">Active Accounts</div></div>
+        <div class="stat-card"><div class="stat-num skeleton" style="height:32px;width:60px;margin-bottom:8px"></div><div class="stat-label">Paid Out</div></div>
+        <div class="stat-card"><div class="stat-num skeleton" style="height:32px;width:60px;margin-bottom:8px"></div><div class="stat-label">Open Support</div></div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-num yellow" id="ov-pendingOrders">—</div><div class="stat-label">Pending Orders</div></div>
+        <div class="stat-card"><div class="stat-num purple" id="ov-fundedAccounts">—</div><div class="stat-label">Funded</div></div>
+        <div class="stat-card"><div class="stat-num red" id="ov-pendingPayouts">—</div><div class="stat-label">Pending Payouts</div></div>
+        <div class="stat-card"><div class="stat-num green" id="ov-totalOrders">—</div><div class="stat-label">Total Orders</div></div>
+      </div>
+      <div class="section-head" style="margin-top:4px"><h2>Quick Actions</h2></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button class="btn btn-primary" onclick="switchTab('orders')">View Orders</button>
+        <button class="btn btn-ghost" onclick="switchTab('payouts')">Payouts</button>
+        <button class="btn btn-ghost" onclick="switchTab('accounts')">Accounts</button>
+        <button class="btn btn-ghost" onclick="switchTab('support')">Support</button>
+      </div>
+    </div>
+
+    <!-- ORDERS -->
+    <div class="panel" id="panel-orders">
+      <div class="filter-row" id="orderFilters">
+        <div class="filter-chip active" data-val="pending">Pending</div>
+        <div class="filter-chip" data-val="confirmed">Confirmed</div>
+        <div class="filter-chip" data-val="rejected">Rejected</div>
+        <div class="filter-chip" data-val="all">All</div>
+      </div>
+      <div id="ordersList"></div>
+    </div>
+
+    <!-- ACCOUNTS -->
+    <div class="panel" id="panel-accounts">
+      <div class="filter-row" id="acctFilters">
+        <div class="filter-chip active" data-phase="" data-status="">All</div>
+        <div class="filter-chip" data-phase="1" data-status="active">Phase 1</div>
+        <div class="filter-chip" data-phase="2" data-status="active">Phase 2</div>
+        <div class="filter-chip" data-phase="" data-status="funded">Funded</div>
+        <div class="filter-chip" data-phase="" data-status="scale_ready">Scale Ready</div>
+        <div class="filter-chip" data-phase="" data-status="blown">Blown</div>
+      </div>
+      <div id="accountsList"></div>
+    </div>
+
+    <!-- PAYOUTS -->
+    <div class="panel" id="panel-payouts">
+      <div class="section-head"><h2>Pending Payouts</h2><button class="btn btn-ghost btn-sm" id="refreshPayouts">Refresh</button></div>
+      <div id="payoutsList"></div>
+    </div>
+
+    <!-- SUPPORT -->
+    <div class="panel" id="panel-support">
+      <div class="filter-row" id="supportFilters">
+        <div class="filter-chip active" data-val="open">Open</div>
+        <div class="filter-chip" data-val="closed">Closed</div>
+        <div class="filter-chip" data-val="all">All</div>
+      </div>
+      <div id="threadsList"></div>
+    </div>
+
+    <!-- MORE (Plans, Discounts, Users, Settings) -->
+    <div class="panel" id="panel-more">
+      <div class="section-head"><h2>Management</h2></div>
+      <button class="btn btn-ghost btn-full" style="justify-content:flex-start;gap:12px;margin-bottom:8px" onclick="openSubPanel('plans')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Challenge Plans
+        <svg style="margin-left:auto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+      <button class="btn btn-ghost btn-full" style="justify-content:flex-start;gap:12px;margin-bottom:8px" onclick="openSubPanel('discounts')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        Discount Codes
+        <svg style="margin-left:auto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+      <button class="btn btn-ghost btn-full" style="justify-content:flex-start;gap:12px;margin-bottom:8px" onclick="openSubPanel('users')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        Users
+        <svg style="margin-left:auto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+      <button class="btn btn-ghost btn-full" style="justify-content:flex-start;gap:12px" onclick="openSubPanel('settings')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M20 12h-2M6 12H4M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 20v-2M12 6V4"/></svg>
+        Settings
+        <svg style="margin-left:auto" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <div class="nav-tab active" data-tab="overview">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      Overview
+    </div>
+    <div class="nav-tab" data-tab="orders">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Orders
+      <span class="nav-tab-badge" id="nb-orders">0</span>
+    </div>
+    <div class="nav-tab" data-tab="accounts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+      Accounts
+    </div>
+    <div class="nav-tab" data-tab="payouts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Payouts
+      <span class="nav-tab-badge" id="nb-payouts">0</span>
+    </div>
+    <div class="nav-tab" data-tab="more">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+      More
+    </div>
+  </nav>
+</div>
+
+<!-- CRED MODAL -->
+<div class="modal-overlay hidden" id="credModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>Issue MT5 Credentials</h2>
+    <div class="input-group"><label>MT5 Login</label><input class="input" id="credLogin" placeholder="MT5 account login"></div>
+    <div class="input-group"><label>MT5 Password</label><input class="input" id="credPassword" placeholder="MT5 account password"></div>
+    <div class="input-group"><label>MT5 Server</label><input class="input" id="credServer" placeholder="e.g. ICMarkets-Live01"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="closeCredModal">Cancel</button>
+      <button class="btn btn-primary" id="submitCreds">Issue Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- PLAN MODAL -->
+<div class="modal-overlay hidden" id="planModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 id="planModalTitle">New Plan</h2>
+    <input type="hidden" id="planModalId">
+    <div class="input-group"><label>Plan Name</label><input class="input" id="pmName" placeholder="e.g. Standard 10K"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="input-group"><label>Account Size ($)</label><input class="input" id="pmSize" type="number" placeholder="10000"></div>
+      <div class="input-group"><label>Price ($)</label><input class="input" id="pmPrice" type="number" placeholder="99"></div>
+      <div class="input-group"><label>P1 Target (%)</label><input class="input" id="pmP1" type="number" placeholder="8"></div>
+      <div class="input-group"><label>P2 Target (%)</label><input class="input" id="pmP2" type="number" placeholder="5"></div>
+      <div class="input-group"><label>Max DD (%)</label><input class="input" id="pmDD" type="number" placeholder="10"></div>
+      <div class="input-group"><label>1st Split (%)</label><input class="input" id="pmS1" type="number" placeholder="80"></div>
+      <div class="input-group" style="grid-column:1/-1"><label>Next Split (%)</label><input class="input" id="pmSN" type="number" placeholder="70"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="closePlanModal">Cancel</button>
+      <button class="btn btn-primary" id="submitPlan">Save Plan</button>
+    </div>
+  </div>
+</div>
+
+<!-- DISCOUNT MODAL -->
+<div class="modal-overlay hidden" id="discountModal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>New Discount Code</h2>
+    <div class="input-group"><label>Code</label><input class="input" id="dmCode" placeholder="LAUNCH15" style="text-transform:uppercase;font-weight:700"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="input-group"><label>Discount (%)</label><input class="input" id="dmPct" type="number" placeholder="15"></div>
+      <div class="input-group"><label>Max Uses (0=∞)</label><input class="input" id="dmMax" type="number" placeholder="100"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="closeDiscountModal">Cancel</button>
+      <button class="btn btn-primary" id="submitDiscount">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- SUB PANEL MODAL (plans/discounts/users/settings) -->
+<div class="modal-overlay hidden" id="subPanelModal">
+  <div class="modal" style="border-radius:22px 22px 0 0;max-height:92vh">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h2 id="subPanelTitle" style="margin:0"></h2>
+      <button class="btn btn-ghost btn-sm" id="subPanelAction"></button>
+    </div>
+    <div id="subPanelContent"></div>
+    <button class="btn btn-ghost btn-full" style="margin-top:16px" id="closeSubPanel">Close</button>
+  </div>
+</div>
+
+<!-- THREAD MODAL -->
+<div class="modal-overlay hidden" id="threadModal">
+  <div class="modal" style="max-height:92vh">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div><div id="threadModalSubject" style="font-size:16px;font-weight:700"></div><div id="threadModalStatus" style="font-size:12px;color:var(--muted);margin-top:2px"></div></div>
+      <button class="btn btn-ghost btn-sm" id="closeThreadBtn">Close</button>
+    </div>
+    <div class="chat-msgs" id="threadMsgs"></div>
+    <div id="threadReplyBar" style="display:flex;gap:8px;padding-top:12px;border-top:1px solid var(--border);margin-top:8px">
+      <input class="input" id="adminReplyInput" placeholder="Type a reply..." style="flex:1">
+      <button class="btn btn-primary btn-sm" id="adminReplySend">Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var API = "https://script.google.com/macros/s/AKfycbw_vWPIrofq-uCSzLfu51Z42j0iRtTUaniVCUr9fNvyldO_15GpF_xXyznxYwISUqM9/exec";
+var token = sessionStorage.getItem("nf_admin_token") || "";
+var currentCredAccountId = "";
+var currentThreadId = "";
+var badgeInterval = null;
+
+// ── INIT ──
+function init() {
+  if (token) { showApp(); } 
+  document.getElementById("loginBtn").addEventListener("click", doLogin);
+  document.getElementById("loginPass").addEventListener("keypress", function(e){ if(e.key==="Enter") doLogin(); });
+  document.getElementById("logoutBtn").addEventListener("click", doLogout);
+
+  // Nav tabs
+  document.querySelectorAll(".nav-tab").forEach(function(tab){
+    tab.addEventListener("click", function(){ switchTab(this.dataset.tab); });
+  });
+
+  // Order filters
+  document.querySelectorAll("#orderFilters .filter-chip").forEach(function(chip){
+    chip.addEventListener("click", function(){
+      document.querySelectorAll("#orderFilters .filter-chip").forEach(function(c){ c.classList.remove("active"); });
+      this.classList.add("active");
+      loadOrders();
+    });
+  });
+
+  // Account filters
+  document.querySelectorAll("#acctFilters .filter-chip").forEach(function(chip){
+    chip.addEventListener("click", function(){
+      document.querySelectorAll("#acctFilters .filter-chip").forEach(function(c){ c.classList.remove("active"); });
+      this.classList.add("active");
+      loadAccounts();
+    });
+  });
+
+  // Support filters
+  document.querySelectorAll("#supportFilters .filter-chip").forEach(function(chip){
+    chip.addEventListener("click", function(){
+      document.querySelectorAll("#supportFilters .filter-chip").forEach(function(c){ c.classList.remove("active"); });
+      this.classList.add("active");
+      loadSupport();
+    });
+  });
+
+  // Payouts refresh
+  document.getElementById("refreshPayouts").addEventListener("click", loadPayouts);
+
+  // Cred modal
+  document.getElementById("closeCredModal").addEventListener("click", function(){ document.getElementById("credModal").classList.add("hidden"); });
+  document.getElementById("submitCreds").addEventListener("click", issueCreds);
+
+  // Plan modal
+  document.getElementById("closePlanModal").addEventListener("click", function(){ document.getElementById("planModal").classList.add("hidden"); });
+  document.getElementById("submitPlan").addEventListener("click", savePlan);
+
+  // Discount modal
+  document.getElementById("closeDiscountModal").addEventListener("click", function(){ document.getElementById("discountModal").classList.add("hidden"); });
+  document.getElementById("submitDiscount").addEventListener("click", saveDiscount);
+  document.getElementById("dmCode").addEventListener("input", function(){ this.value = this.value.toUpperCase(); });
+
+  // Sub panel
+  document.getElementById("closeSubPanel").addEventListener("click", function(){ document.getElementById("subPanelModal").classList.add("hidden"); });
+
+  // Thread modal
+  document.getElementById("closeThreadBtn").addEventListener("click", function(){ document.getElementById("threadModal").classList.add("hidden"); });
+  document.getElementById("adminReplySend").addEventListener("click", sendAdminReply);
+  document.getElementById("adminReplyInput").addEventListener("keypress", function(e){ if(e.key==="Enter") sendAdminReply(); });
+}
+
+function doLogin() {
+  var pw = document.getElementById("loginPass").value;
+  if (!pw) { document.getElementById("loginError").textContent = "Enter a password"; return; }
+  var btn = document.getElementById("loginBtn");
+  btn.disabled = true; btn.textContent = "Signing in...";
+  call("adminLogin", { password: pw }, function(res){
+    btn.disabled = false; btn.textContent = "Sign In";
+    if (res.ok) {
+      token = res.data.token;
+      sessionStorage.setItem("nf_admin_token", token);
+      document.getElementById("loginError").textContent = "";
+      showApp();
+    } else {
+      document.getElementById("loginError").textContent = "Wrong password";
+    }
+  });
+}
+
+function doLogout() {
+  token = ""; sessionStorage.removeItem("nf_admin_token");
+  if (badgeInterval) clearInterval(badgeInterval);
+  document.getElementById("appShell").style.display = "none";
+  document.getElementById("loginScreen").style.display = "flex";
+  document.getElementById("loginPass").value = "";
+}
+
+function showApp() {
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("appShell").style.display = "flex";
+  loadOverview();
+  updateBadges();
+  badgeInterval = setInterval(updateBadges, 30000);
+}
+
+// ── TABS ──
+function switchTab(tab) {
+  document.querySelectorAll(".panel").forEach(function(p){ p.classList.remove("active"); });
+  document.querySelectorAll(".nav-tab").forEach(function(t){ t.classList.remove("active"); });
+  document.getElementById("panel-" + tab).classList.add("active");
+  document.querySelector(".nav-tab[data-tab='" + tab + "']").classList.add("active");
+  if (tab === "orders") loadOrders();
+  else if (tab === "accounts") loadAccounts();
+  else if (tab === "payouts") loadPayouts();
+  else if (tab === "support") loadSupport();
+  else if (tab === "overview") loadOverview();
+}
+
+// ── BADGES ──
+function updateBadges() {
+  call("adminGetStats", {}, function(res){
+    if (!res.ok) return;
+    var d = res.data;
+    setBadge("nb-orders", d.pendingOrders);
+    setBadge("nb-payouts", d.pendingPayouts);
+  });
+}
+function setBadge(id, n) {
+  var el = document.getElementById(id);
+  if (n > 0) { el.textContent = n; el.style.display = "flex"; }
+  else { el.style.display = "none"; }
+}
+
+// ── OVERVIEW ──
+function loadOverview() {
+  call("adminGetStats", {}, function(res){
+    if (!res.ok) return;
+    var d = res.data;
+    document.getElementById("overviewStats").innerHTML =
+      statBox(d.totalUsers, "purple", "Total Users") +
+      statBox(d.activeAccounts, "green", "Active Accounts") +
+      statBox("$" + fmtNum(d.totalPayoutsPaid), "green", "Paid Out") +
+      statBox(d.openThreads, "yellow", "Open Support");
+    document.getElementById("ov-pendingOrders").textContent = d.pendingOrders;
+    document.getElementById("ov-fundedAccounts").textContent = d.fundedAccounts;
+    document.getElementById("ov-pendingPayouts").textContent = d.pendingPayouts;
+    document.getElementById("ov-totalOrders").textContent = d.totalOrders;
+  });
+}
+function statBox(num, color, label) {
+  return '<div class="stat-card"><div class="stat-num ' + color + '">' + num + '</div><div class="stat-label">' + label + '</div></div>';
+}
+
+// ── ORDERS ──
+function loadOrders() {
+  var status = (document.querySelector("#orderFilters .filter-chip.active") || {}).dataset.val || "pending";
+  var el = document.getElementById("ordersList");
+  el.innerHTML = skeletons(3);
+  call("getOrders", { status: status }, function(res){
+    if (!res.ok) { el.innerHTML = errState(); return; }
+    if (!res.data.length) { el.innerHTML = emptyState("📭","No orders","Nothing here right now"); return; }
+    el.innerHTML = res.data.slice().reverse().map(function(o){
+      var html = '<div class="item-card">';
+      html += '<div class="item-top"><div><div class="item-name">@' + escHtml(o.userName) + '</div><div class="item-sub">' + escHtml(o.planName) + ' · $' + parseFloat(o.amount).toFixed(2) + '</div></div>' + badge(o.status) + '</div>';
+      html += '<div class="item-meta"><span class="meta-chip">' + fmtDate(o.createdAt) + '</span>' + (o.discount > 0 ? '<span class="meta-chip">-' + o.discount + '% off</span>' : '') + '</div>';
+      html += '<div class="item-ref">' + escHtml(o.paymentRef || "—") + '</div>';
+      if (o.status === "pending") {
+        html += '<div class="item-actions"><button class="btn btn-green btn-sm confirm-order" data-id="' + o.orderId + '">✓ Confirm</button><button class="btn btn-red btn-sm reject-order" data-id="' + o.orderId + '">✕ Reject</button></div>';
+      }
+      html += '</div>';
+      return html;
+    }).join("");
+    document.querySelectorAll(".confirm-order").forEach(function(btn){
+      btn.addEventListener("click", function(){ confirmOrder(this.dataset.id); });
+    });
+    document.querySelectorAll(".reject-order").forEach(function(btn){
+      btn.addEventListener("click", function(){ rejectOrder(this.dataset.id); });
+    });
+  });
+}
+
+function confirmOrder(orderId) {
+  if (!confirm("Confirm this order?")) return;
+  call("confirmOrder", { orderId: orderId }, function(res){
+    if (res.ok) { toast("Order confirmed — account created", "success"); loadOrders(); updateBadges(); }
+    else toast(res.error, "error");
+  });
+}
+
+function rejectOrder(orderId) {
+  if (!confirm("Reject this order?")) return;
+  call("rejectOrder", { orderId: orderId }, function(res){
+    if (res.ok) { toast("Order rejected", "success"); loadOrders(); updateBadges(); }
+    else toast(res.error, "error");
+  });
+}
+
+// ── ACCOUNTS ──
+function loadAccounts() {
+  var active = document.querySelector("#acctFilters .filter-chip.active") || {};
+  var phase = active.dataset.phase || "";
+  var status = active.dataset.status || "";
+  var el = document.getElementById("accountsList");
+  el.innerHTML = skeletons(3);
+  call("getAccounts", { phase: phase, status: status }, function(res){
+    if (!res.ok) { el.innerHTML = errState(); return; }
+    if (!res.data.length) { el.innerHTML = emptyState("👤","No accounts","Try a different filter"); return; }
+    el.innerHTML = res.data.slice().reverse().map(function(a){
+      var acctStatus = String(a.status || "").trim().toLowerCase();
+      var html = '<div class="item-card">';
+      html += '<div class="item-top"><div><div class="item-name">@' + escHtml(a.userName) + '</div><div class="item-sub">' + escHtml(a.planName) + ' · Phase ' + a.phase + '</div></div>' + badge(a.status) + '</div>';
+      if (a.mt5Login) {
+        html += '<div style="margin-bottom:10px">';
+        html += credItem("Login", a.mt5Login) + credItem("Password", a.mt5Password) + credItem("Server", a.mt5Server);
+        html += '</div>';
+      }
+      html += '<div class="item-meta"><span class="meta-chip">' + fmtDate(a.createdAt) + '</span></div>';
+      html += '<div class="item-actions">';
+      if (!a.mt5Login) html += '<button class="btn btn-primary btn-sm issue-creds" data-id="' + a.accountId + '">Issue Creds</button>';
+      if (acctStatus === "active") {
+        html += '<button class="btn btn-green btn-sm update-status" data-id="' + a.accountId + '" data-status="passed">✓ Pass</button>';
+        html += '<button class="btn btn-yellow btn-sm update-status" data-id="' + a.accountId + '" data-status="breached">⚠ Breach</button>';
+        html += '<button class="btn btn-red btn-sm update-status" data-id="' + a.accountId + '" data-status="blown">💥 Blow</button>';
+      }
+      if (acctStatus === "scale_ready") html += '<button class="btn btn-primary btn-sm update-status" data-id="' + a.accountId + '" data-status="scaled">🚀 Scale</button>';
+      html += '</div></div>';
+      return html;
+    }).join("");
+    document.querySelectorAll(".issue-creds").forEach(function(btn){
+      btn.addEventListener("click", function(){ openCredModal(this.dataset.id); });
+    });
+    document.querySelectorAll(".update-status").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var s = this.dataset.status;
+        if (confirm("Mark account as " + s + "?")) updateAccountStatus(this.dataset.id, s);
+      });
+    });
+  });
+}
+
+function credItem(label, val) {
+  return '<div class="cred-item"><span class="cred-label-txt">' + label + '</span><span class="cred-val-txt">' + escHtml(val) + '</span></div>';
+}
+
+function openCredModal(accountId) {
+  currentCredAccountId = accountId;
+  ["credLogin","credPassword","credServer"].forEach(function(id){ document.getElementById(id).value = ""; });
+  document.getElementById("credModal").classList.remove("hidden");
+}
+
+function issueCreds() {
+  var login = document.getElementById("credLogin").value.trim();
+  var password = document.getElementById("credPassword").value.trim();
+  var server = document.getElementById("credServer").value.trim();
+  if (!login || !password || !server) { toast("Fill all fields", "error"); return; }
+  var btn = document.getElementById("submitCreds");
+  btn.disabled = true; btn.textContent = "Issuing...";
+  call("issueCredentials", { accountId: currentCredAccountId, mt5Login: login, mt5Password: password, mt5Server: server }, function(res){
+    btn.disabled = false; btn.textContent = "Issue Now";
+    document.getElementById("credModal").classList.add("hidden");
+    if (res.ok) { toast("Credentials issued — trader notified", "success"); loadAccounts(); }
+    else toast(res.error, "error");
+  });
+}
+
+function updateAccountStatus(accountId, status) {
+  call("updateAccountStatus", { accountId: accountId, status: status }, function(res){
+    if (res.ok) { toast("Account marked as " + status, "success"); loadAccounts(); }
+    else toast(res.error, "error");
+  });
+}
+
+// ── PAYOUTS ──
+function loadPayouts() {
+  var el = document.getElementById("payoutsList");
+  el.innerHTML = skeletons(3);
+  call("getPendingPayouts", {}, function(res){
+    if (!res.ok) { el.innerHTML = errState(); return; }
+    if (!res.data.length) { el.innerHTML = emptyState("💸","No pending payouts","All clear!"); return; }
+    el.innerHTML = res.data.map(function(p){
+      var traderAmt = (parseFloat(p.amount) * parseFloat(p.splitPct) / 100).toFixed(2);
+      var html = '<div class="item-card">';
+      html += '<div class="item-top"><div><div class="item-name">@' + escHtml(p.userName) + '</div><div class="item-sub">Payout #' + p.payoutCount + '</div></div><div class="payout-amount">$' + traderAmt + '</div></div>';
+      html += '<div class="item-meta"><span class="meta-chip">' + p.splitPct + '% split</span><span class="meta-chip">Full: $' + parseFloat(p.amount).toFixed(2) + '</span><span class="meta-chip">' + fmtDate(p.createdAt) + '</span></div>';
+      html += '<div class="wallet-addr">' + escHtml(p.walletAddress) + '</div>';
+      html += '<div class="item-actions"><button class="btn btn-green approve-payout" data-id="' + p.payoutId + '" style="flex:1">✓ Approve</button><button class="btn btn-red reject-payout" data-id="' + p.payoutId + '" style="flex:1">✕ Reject</button></div>';
+      html += '</div>';
+      return html;
+    }).join("");
+    document.querySelectorAll(".approve-payout").forEach(function(btn){
+      btn.addEventListener("click", function(){ approvePayout(this.dataset.id); });
+    });
+    document.querySelectorAll(".reject-payout").forEach(function(btn){
+      btn.addEventListener("click", function(){ rejectPayoutAction(this.dataset.id); });
+    });
+  });
+}
+
+function approvePayout(payoutId) {
+  if (!confirm("Approve this payout?")) return;
+  call("approvePayout", { payoutId: payoutId }, function(res){
+    if (res.ok) { toast("Payout approved", "success"); loadPayouts(); updateBadges(); }
+    else toast(res.error, "error");
+  });
+}
+
+function rejectPayoutAction(payoutId) {
+  if (!confirm("Reject this payout?")) return;
+  call("rejectPayout", { payoutId: payoutId }, function(res){
+    if (res.ok) { toast("Payout rejected", "success"); loadPayouts(); updateBadges(); }
+    else toast(res.error, "error");
+  });
+}
+
+// ── SUPPORT ──
+function loadSupport() {
+  var status = (document.querySelector("#supportFilters .filter-chip.active") || {}).dataset.val || "open";
+  var el = document.getElementById("threadsList");
+  el.innerHTML = skeletons(3);
+  call("getAdminThreads", { status: status }, function(res){
+    if (!res.ok) { el.innerHTML = errState(); return; }
+    if (!res.data.length) { el.innerHTML = emptyState("💬","No threads","Nothing here"); return; }
+    el.innerHTML = res.data.slice().reverse().map(function(t){
+      return '<div class="item-card" style="cursor:pointer" data-id="' + t.threadId + '">' +
+        '<div class="item-top"><div><div class="item-name">' + escHtml(t.subject) + '</div><div class="item-sub">@' + escHtml(t.userName) + ' · ' + fmtDate(t.updatedAt) + '</div></div>' + badge(t.status) + '</div>' +
+        '</div>';
+    }).join("");
+    document.querySelectorAll("#threadsList .item-card").forEach(function(el){
+      el.addEventListener("click", function(){ openThread(this.dataset.id); });
+    });
+  });
+}
+
+function openThread(threadId) {
+  currentThreadId = threadId;
+  document.getElementById("threadModal").classList.remove("hidden");
+  document.getElementById("threadMsgs").innerHTML = '<div style="color:var(--muted);font-size:13px">Loading...</div>';
+  call("getThread", { threadId: threadId }, function(res){
+    if (!res.ok) return;
+    var t = res.data;
+    document.getElementById("threadModalSubject").textContent = t.subject;
+    document.getElementById("threadModalStatus").textContent = t.status === "open" ? "Open" : "Closed";
+    document.getElementById("threadMsgs").innerHTML = (t.messages||[]).map(function(m){
+      var isTrader = m.senderRole === "trader";
+      return '<div style="display:flex;flex-direction:column;align-items:' + (isTrader?"flex-end":"flex-start") + '"><div class="msg-bubble ' + m.senderRole + '">' + escHtml(m.body) + '<div class="msg-time">' + fmtDate(m.createdAt) + '</div></div></div>';
+    }).join("");
+    var mc = document.getElementById("threadMsgs");
+    mc.scrollTop = mc.scrollHeight;
+    var replyBar = document.getElementById("threadReplyBar");
+    if (t.status === "closed") {
+      replyBar.style.display = "none";
+      document.getElementById("closeThreadBtn").textContent = "Closed";
+    } else {
+      replyBar.style.display = "flex";
+      document.getElementById("closeThreadBtn").textContent = "Close Thread";
+      document.getElementById("closeThreadBtn").onclick = function(){ closeThread(threadId); };
+    }
+  });
+}
+
+function sendAdminReply() {
+  var body = document.getElementById("adminReplyInput").value.trim();
+  if (!body || !currentThreadId) return;
+  document.getElementById("adminReplyInput").value = "";
+  call("adminReply", { threadId: currentThreadId, body: body }, function(res){
+    if (res.ok) { toast("Reply sent","success"); openThread(currentThreadId); }
+    else toast(res.error, "error");
+  });
+}
+
+function closeThread(threadId) {
+  if (!confirm("Close this thread?")) return;
+  call("closeThread", { threadId: threadId }, function(res){
+    if (res.ok) { toast("Thread closed","success"); document.getElementById("threadModal").classList.add("hidden"); loadSupport(); }
+    else toast(res.error,"error");
+  });
+}
+
+// ── SUB PANELS ──
+function openSubPanel(type) {
+  var modal = document.getElementById("subPanelModal");
+  var title = document.getElementById("subPanelTitle");
+  var actionBtn = document.getElementById("subPanelAction");
+  var content = document.getElementById("subPanelContent");
+  actionBtn.style.display = "none";
+  content.innerHTML = skeletons(3);
+  modal.classList.remove("hidden");
+
+  if (type === "plans") {
+    title.textContent = "Challenge Plans";
+    actionBtn.textContent = "+ New Plan";
+    actionBtn.style.display = "block";
+    actionBtn.onclick = function(){ openNewPlan(); };
+    loadPlans();
+  } else if (type === "discounts") {
+    title.textContent = "Discount Codes";
+    actionBtn.textContent = "+ New Code";
+    actionBtn.style.display = "block";
+    actionBtn.onclick = function(){ document.getElementById("discountModal").classList.remove("hidden"); };
+    loadDiscounts();
+  } else if (type === "users") {
+    title.textContent = "Users";
+    content.innerHTML = '<div class="input-group"><div style="display:flex;gap:8px"><input class="input" id="userSearch" placeholder="Search username or Telegram ID"><button class="btn btn-ghost btn-sm" id="searchUsersBtn">Go</button></div></div><div id="usersList"></div>';
+    document.getElementById("searchUsersBtn").addEventListener("click", loadUsers);
+    document.getElementById("userSearch").addEventListener("keypress", function(e){ if(e.key==="Enter") loadUsers(); });
+    loadUsers();
+  } else if (type === "settings") {
+    title.textContent = "Settings";
+    loadSettings();
+  }
+}
+
+// ── PLANS ──
+function loadPlans() {
+  var el = document.getElementById("subPanelContent");
+  el.innerHTML = skeletons(2);
+  call("adminGetPlans", {}, function(res){
+    if (!res.ok) { el.innerHTML = errState(); return; }
+    if (!res.data.length) { el.innerHTML = emptyState("📄","No plans","Create your first plan"); return; }
+    el.innerHTML = res.data.map(function(p){
+      var isActive = p.active === "true" || p.active === true || p.active === "TRUE";
+      return '<div class="item-card" style="margin-bottom:10px">' +
+        '<div class="item-top"><div><div class="item-name">' + escHtml(p.name) + '</div><div class="item-sub">$' + fmtNum(p.accountSize) + ' · $' + p.price + '</div></div>' +
+        '<label class="toggle"><input type="checkbox" ' + (isActive?"checked":"") + ' class="toggle-plan" data-id="' + p.planId + '"><span class="toggle-slider"></span></label></div>' +
+        '<div class="item-meta"><span class="meta-chip">P1: ' + p.phase1Target + '%</span><span class="meta-chip">P2: ' + p.phase2Target + '%</span><span class="meta-chip">DD: ' + p.maxDrawdown + '%</span><span class="meta-chip">Split: ' + p.payoutSplit1 + '%</span></div>' +
+        '<button class="btn btn-ghost btn-sm edit-plan" data-id="' + p.planId + '">Edit</button>' +
+        '</div>';
+    }).join("");
+    document.querySelectorAll(".toggle-plan").forEach(function(cb){
+      cb.addEventListener("change", function(){ togglePlan(this.dataset.id); });
+    });
+    document.querySelectorAll(".edit-plan").forEach(function(btn){
+      btn.addEventListener("click", function(){ openEditPlan(this.dataset.id, res.data); });
+    });
+  });
+}
+
+function openNewPlan() {
+  document.getElementById("planModalTitle").textContent = "New Plan";
+  document.getElementById("planModalId").value = "";
+  ["pmName","pmSize","pmPrice","pmP1","pmP2","pmDD","pmS1","pmSN"].forEach(function(id){ document.getElementById(id).value = ""; });
+  document.getElementById("planModal").classList.remove("hidden");
+}
+
+function openEditPlan(planId, plans) {
+  var p = plans.find(function(x){ return x.planId === planId; });
+  if (!p) return;
+  document.getElementById("planModalTitle").textContent = "Edit Plan";
+  document.getElementById("planModalId").value = planId;
+  document.getElementById("pmName").value = p.name;
+  document.getElementById("pmSize").value = p.accountSize;
+  document.getElementById("pmPrice").value = p.price;
+  document.getElementById("pmP1").value = p.phase1Target;
+  document.getElementById("pmP2").value = p.phase2Target;
+  document.getElementById("pmDD").value = p.maxDrawdown;
+  document.getElementById("pmS1").value = p.payoutSplit1;
+  document.getElementById("pmSN").value = p.payoutSplitN;
+  document.getElementById("planModal").classList.remove("hidden");
+}
+
+function savePlan() {
+  var id = document.getElementById("planModalId").value;
+  var data = { name: document.getElementById("pmName").value, accountSize: document.getElementById("pmSize").value, price: document.getElementById("pmPrice").value, phase1Target: document.getElementById("pmP1").value, phase2Target: document.getElementById("pmP2").value, maxDrawdown: document.getElementById("pmDD").value, payoutSplit1: document.getElementById("pmS1").value, payoutSplitN: document.getElementById("pmSN").value };
+  if (!data.name || !data.accountSize || !data.price) { toast("Fill required fields","error"); return; }
+  if (id) data.planId = id;
+  call(id ? "updatePlan" : "createPlan", data, function(res){
+    document.getElementById("planModal").classList.add("hidden");
+    if (res.ok) { toast(id ? "Plan updated" : "Plan created","success"); loadPlans(); }
+    else toast(res.error,"error");
+  });
+}
+
+function togglePlan(planId) {
+  call("togglePlan", { planId: planId }, function(res){
+    if (!res.ok) { toast(res.error,"error"); loadPlans(); }
+  });
+}
+
+// ── DISCOUNTS ──
+function loadDiscounts() {
+  var el = document.getElementById("subPanelContent");
+  el.innerHTML = skeletons(2);
+  call("getDiscountCodes", {}, function(res){
+    if (!res.ok) { el.innerHTML = errState(); return; }
+    if (!res.data.length) { el.innerHTML = emptyState("🏷","No codes","Create a discount code"); return; }
+    el.innerHTML = res.data.map(function(c){
+      var isActive = c.active === "true" || c.active === true || c.active === "TRUE";
+      return '<div class="item-card" style="margin-bottom:10px">' +
+        '<div class="item-top"><div><div class="item-name" style="font-family:monospace;color:var(--accent2)">' + escHtml(c.code) + '</div><div class="item-sub">' + c.discountPct + '% off · Used: ' + c.usedCount + (parseInt(c.maxUses)>0?' / '+c.maxUses:' / ∞') + '</div></div>' +
+        '<label class="toggle"><input type="checkbox" ' + (isActive?"checked":"") + ' class="toggle-disc" data-id="' + c.codeId + '"><span class="toggle-slider"></span></label></div>' +
+        '<div class="item-meta"><span class="meta-chip">' + fmtDate(c.createdAt) + '</span></div>' +
+        '</div>';
+    }).join("");
+    document.querySelectorAll(".toggle-disc").forEach(function(cb){
+      cb.addEventListener("change", function(){
+        call("toggleDiscount", { codeId: this.dataset.id }, function(res){
+          if (!res.ok) { toast(res.error,"error"); loadDiscounts(); }
+        });
+      });
+    });
+  });
+}
+
+function saveDiscount() {
+  var code = document.getElementById("dmCode").value.trim().toUpperCase();
+  var pct = document.getElementById("dmPct").value;
+  var max = document.getElementById("dmMax").value || 0;
+  if (!code || !pct) { toast("Fill required fields","error"); return; }
+  call("createDiscount", { code: code, discountPct: pct, maxUses: max }, function(res){
+    document.getElementById("discountModal").classList.add("hidden");
+    if (res.ok) { toast("Code created","success"); loadDiscounts(); ["dmCode","dmPct","dmMax"].forEach(function(id){ document.getElementById(id).value=""; }); }
+    else toast(res.error,"error");
+  });
+}
+
+// ── USERS ──
+function loadUsers() {
+  var q = (document.getElementById("userSearch") || {}).value || "";
+  var el = document.getElementById("usersList");
+  if (el) { el.innerHTML = skeletons(3); }
+  call("getUsers", { query: q }, function(res){
+    var el2 = document.getElementById("usersList");
+    if (!el2) return;
+    if (!res.ok) { el2.innerHTML = errState(); return; }
+    if (!res.data.length) { el2.innerHTML = emptyState("👤","No users found","Try a different search"); return; }
+    el2.innerHTML = res.data.map(function(u){
+      return '<div class="item-card" style="margin-bottom:10px;cursor:pointer view-user-card" data-id="' + u.telegramId + '">' +
+        '<div class="item-top"><div><div class="item-name">' + escHtml((u.firstName||"") + " " + (u.lastName||"")).trim() + '</div><div class="item-sub">@' + escHtml(u.username||"—") + ' · ' + u.telegramId + '</div></div>' + (u.onboarded==="true"?'<span class="badge badge-green">Active</span>':'<span class="badge badge-gray">New</span>') + '</div>' +
+        '<div class="item-meta"><span class="meta-chip">Ref: ' + u.referralCode + '</span><span class="meta-chip">Joined ' + fmtDate(u.createdAt) + '</span></div>' +
+        '<button class="btn btn-ghost btn-sm view-user" data-id="' + u.telegramId + '">View Details</button>' +
+        '</div>';
+    }).join("");
+    document.querySelectorAll(".view-user").forEach(function(btn){
+      btn.addEventListener("click", function(){ loadUserDetail(this.dataset.id); });
+    });
+  });
+}
+
+function loadUserDetail(telegramId) {
+  call("getAdminUser", { telegramId: telegramId }, function(res){
+    if (!res.ok) { toast(res.error,"error"); return; }
+    var d = res.data; var u = d.user;
+    var el = document.getElementById("usersList");
+    var html = '<div class="card card-accent" style="margin-top:12px">';
+    html += '<div style="font-size:15px;font-weight:800;margin-bottom:14px">@' + escHtml(u.username||u.firstName) + '</div>';
+    html += '<div class="user-stat-row">';
+    html += '<div class="user-stat"><div class="lbl">Telegram ID</div><div class="val" style="font-size:13px">' + u.telegramId + '</div></div>';
+    html += '<div class="user-stat"><div class="lbl">Points</div><div class="val purple">' + Math.round(d.points.balance) + '</div></div>';
+    html += '<div class="user-stat"><div class="lbl">Orders</div><div class="val">' + d.orders.length + '</div></div>';
+    html += '<div class="user-stat"><div class="lbl">Accounts</div><div class="val">' + d.accounts.length + '</div></div>';
+    html += '</div>';
+    if (d.accounts.length) {
+      html += '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:8px">Accounts</div>';
+      d.accounts.forEach(function(a){
+        html += '<div style="background:var(--surface2);border-radius:10px;padding:10px 12px;margin-bottom:6px;border:1px solid var(--border)">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;font-weight:600">P' + a.phase + ' · ' + escHtml(a.planName||"") + '</span>' + badge(a.status) + '</div>';
+        if (a.mt5Login) html += '<div style="font-family:monospace;font-size:11px;color:var(--accent2);margin-top:4px">' + a.mt5Login + '</div>';
+        html += '</div>';
+      });
+    }
+    html += '<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="document.getElementById(\'usersList\').querySelectorAll(\'.user-detail-card\').forEach(function(e){e.remove()})">Close</button>';
+    html += '</div>';
+    var existing = el.querySelector(".user-detail-card");
+    if (existing) existing.remove();
+    var div = document.createElement("div");
+    div.className = "user-detail-card";
+    div.innerHTML = html;
+    el.insertBefore(div, el.firstChild);
+    div.scrollIntoView({ behavior: "smooth" });
+  });
+}
+
+// ── SETTINGS ──
+function loadSettings() {
+  call("getSettings", {}, function(res){
+    if (!res.ok) return;
+    var d = res.data;
+    var fields = [
+      { key:"walletAddress", label:"Crypto Wallet Address", type:"text" },
+      { key:"botToken", label:"Telegram Bot Token", type:"password" },
+      { key:"adminChatId", label:"Admin Chat ID", type:"text" },
+      { key:"adminPassword", label:"Admin Password", type:"password" },
+      { key:"payoutSplit1", label:"1st Payout Split (%)", type:"number" },
+      { key:"payoutSplitN", label:"Next Payout Split (%)", type:"number" },
+      { key:"referralPoints", label:"Referral Points", type:"number" },
+      { key:"blownRefundEnabled", label:"Blown Refund (true/false)", type:"text" },
+      { key:"blownRefundPct", label:"Blown Refund %", type:"number" },
+      { key:"appUrl", label:"App URL", type:"text" },
+      { key:"botUsername", label:"Bot Username (no @)", type:"text" }
+    ];
+    document.getElementById("subPanelContent").innerHTML = '<div class="card">' + fields.map(function(f){
+      return '<div class="setting-row"><div class="setting-info"><label>' + f.label + '</label></div><div style="display:flex;gap:6px;margin-top:8px"><input class="input input-sm" type="' + f.type + '" id="set_' + f.key + '" value="' + escHtml(d[f.key]||"") + '" style="flex:1"><button class="btn btn-ghost btn-sm save-setting" data-key="' + f.key + '">Save</button></div></div>';
+    }).join("") + '</div>';
+    document.querySelectorAll(".save-setting").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var key = this.dataset.key;
+        var val = document.getElementById("set_" + key).value;
+        call("saveSetting", { key: key, value: val }, function(r){
+          if (r.ok) toast(key + " saved","success");
+          else toast(r.error,"error");
+        });
+      });
+    });
+  });
+}
+
+// ── UTILS ──
+function call(action, params, cb) {
+  if (!API) { cb({ ok:false, error:"API not set" }); return; }
+  params.action = action;
+  if (token) params.token = token;
+  var qs = Object.keys(params).map(function(k){
+    return encodeURIComponent(k) + "=" + encodeURIComponent(typeof params[k]==="object" ? JSON.stringify(params[k]) : params[k]);
+  }).join("&");
+  fetch(API + "?" + qs, { method:"GET", redirect:"follow" })
+    .then(function(r){ return r.json(); }).then(cb)
+    .catch(function(){ cb({ ok:false, error:"Network error" }); });
+}
+
+function toast(msg, type) {
+  var c = document.getElementById("toastContainer");
+  var el = document.createElement("div");
+  el.className = "toast " + (type||"info");
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 3500);
+}
+
+function badge(status) {
+  var map = { pending:"badge-yellow", confirmed:"badge-green", rejected:"badge-red", active:"badge-purple", funded:"badge-green", blown:"badge-red", breached:"badge-yellow", scaled:"badge-green", scale_ready:"badge-purple", approved:"badge-green", open:"badge-purple", closed:"badge-gray", converted:"badge-green", passed:"badge-green" };
+  return '<span class="badge ' + (map[status]||"badge-gray") + '">' + status + '</span>';
+}
+
+function fmtDate(d) {
+  if (!d) return "—";
+  try { return new Date(d).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}); }
+  catch(e){ return d; }
+}
+
+function fmtNum(n) {
+  var num = parseFloat(n);
+  if (isNaN(num)) return n;
+  if (num >= 1000000) return (num/1000000).toFixed(1) + "M";
+  if (num >= 1000) return (num/1000).toFixed(0) + "K";
+  return num.toFixed(0);
+}
+
+function escHtml(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function skeletons(n) {
+  var html = "";
+  for (var i=0; i<n; i++) html += '<div class="sk-card skeleton" style="margin-bottom:10px"></div>';
+  return html;
+}
+
+function emptyState(icon, h, p) {
+  return '<div class="empty"><div class="empty-icon">' + icon + '</div><h3>' + h + '</h3><p>' + p + '</p></div>';
+}
+
+function errState() {
+  return emptyState("⚠️","Error","Could not load data");
+}
+
+window.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>
