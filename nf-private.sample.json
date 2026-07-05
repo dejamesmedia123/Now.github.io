@@ -1,0 +1,17 @@
+{
+  "accountCredentials": [],
+  "mt5Pool": [
+    {
+      "poolId": "pool_example",
+      "mt5Login": "12345678",
+      "mt5Password": "ChangeMe123!",
+      "mt5Server": "YourBroker-Live",
+      "categoryId": "cat_2step",
+      "accountSize": 10000,
+      "status": "available",
+      "assignedAccountId": "",
+      "uploadedAt": "2026-07-05T00:00:00.000Z"
+    }
+  ],
+  "payoutBanks": []
+}

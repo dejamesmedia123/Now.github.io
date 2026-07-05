@@ -1,0 +1,33 @@
+{
+  "accountCategories": [
+    { "categoryId": "cat_instant", "name": "Instant", "phaseCount": 0, "scaleUp": false, "createdAt": "2026-07-05T00:00:00.000Z" },
+    { "categoryId": "cat_1step", "name": "1-Step", "phaseCount": 1, "scaleUp": false, "createdAt": "2026-07-05T00:00:00.000Z" },
+    { "categoryId": "cat_2step", "name": "2-Step", "phaseCount": 2, "scaleUp": false, "createdAt": "2026-07-05T00:00:00.000Z" }
+  ],
+  "plans": [
+    {
+      "planId": "plan_10k_2step", "name": "$10K 2-Step", "categoryId": "cat_2step",
+      "accountSize": 10000, "price": 55,
+      "phaseTargets": [{ "phase": 1, "target": 10, "maxDrawdown": 20 }, { "phase": 2, "target": 5, "maxDrawdown": 20 }],
+      "payoutSplit1": 80, "payoutSplitN": 70, "active": true, "createdAt": "2026-07-05T00:00:00.000Z"
+    }
+  ],
+  "discounts": [],
+  "users": [],
+  "orders": [],
+  "accounts": [],
+  "payouts": [],
+  "points": [],
+  "referrals": [],
+  "support": [],
+  "messages": [],
+  "settings": {
+    "referralPoints": 100,
+    "blownRefundEnabled": true,
+    "blownRefundPct": 35,
+    "pointsPerDollar": 100,
+    "paymentCurrency": "NGN",
+    "payoutSplit1": 80,
+    "payoutSplitN": 70
+  }
+}

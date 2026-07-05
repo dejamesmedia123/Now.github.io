@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NowFunded Admin</title>
+<script src="engine.js"></script>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; background:#0e0f13; color:#f2f2f2; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .layout { display:flex; min-height:100vh; }
+  nav { width:200px; background:#12141a; border-right:1px solid #262b35; padding:16px 0; flex-shrink:0; }
+  nav div { padding:12px 20px; cursor:pointer; color:#8b8f9a; font-size:14px; }
+  nav div.active { color:#fff; background:#1b1e26; border-left:3px solid #4dabf7; }
+  main { flex:1; padding:24px; max-width:900px; }
+  h1,h2,h3 { margin:0 0 12px; }
+  .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:20px; }
+  .stat { background:#171a21; border:1px solid #262b35; border-radius:12px; padding:16px; }
+  .stat b { font-size:24px; display:block; }
+  .stat span { color:#8b8f9a; font-size:12px; }
+  table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid #262b35; font-size:13px; }
+  th { color:#8b8f9a; font-weight:600; }
+  .btn { background:#2f9e44; color:#fff; border:none; border-radius:6px; padding:6px 12px; font-size:12px; cursor:pointer; margin-right:4px; }
+  .btn.danger { background:#e0483f; }
+  .btn.secondary { background:#22262f; }
+  input, select, textarea { background:#11141a; border:1px solid #262b35; color:#f2f2f2; border-radius:6px; padding:8px; font-size:13px; margin:4px 4px 4px 0; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:20px; background:#22262f; }
+  .card { background:#171a21; border:1px solid #262b35; border-radius:12px; padding:16px; margin-bottom:16px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav id="nav">
+    <div data-view="dashboard" class="active">Dashboard</div>
+    <div data-view="orders">Orders</div>
+    <div data-view="accounts">Accounts</div>
+    <div data-view="pool">MT5 Pool</div>
+    <div data-view="payouts">Payouts</div>
+    <div data-view="plans">Plans & Categories</div>
+    <div data-view="discounts">Discounts</div>
+    <div data-view="support">Support</div>
+    <div data-view="users">Users</div>
+  </nav>
+  <main id="main"><div>Loading…</div></main>
+</div>
+<script>
+var state = null;
+var privateState = null;
+var view = "dashboard";
+
+function $(sel, root) { return (root || document).querySelector(sel); }
+
+document.getElementById("nav").addEventListener("click", function (e) {
+  var item = e.target.closest("[data-view]");
+  if (!item) return;
+  document.querySelectorAll("#nav div").forEach(function (d) { d.classList.remove("active"); });
+  item.classList.add("active");
+  view = item.dataset.view;
+  render();
+});
+
+async function ensurePrivate() {
+  if (!privateState) privateState = await NF.loadPrivate();
+  return privateState;
+}
+
+async function boot() {
+  state = await NF.loadPublic();
+  render();
+}
+
+async function saveAndRender() {
+  await NF.savePublic(state);
+  render();
+}
+
+function render() {
+  var main = $("#main");
+  main.innerHTML = "";
+  if (view === "dashboard") renderDashboard(main);
+  else if (view === "orders") renderOrders(main);
+  else if (view === "accounts") renderAccounts(main);
+  else if (view === "pool") renderPool(main);
+  else if (view === "payouts") renderPayouts(main);
+  else if (view === "plans") renderPlans(main);
+  else if (view === "discounts") renderDiscounts(main);
+  else if (view === "support") renderSupport(main);
+  else if (view === "users") renderUsers(main);
+}
+
+// ---------- Dashboard ----------
+function renderDashboard(main) {
+  var stats = NF.adminStats(state);
+  main.innerHTML = "<h1>Dashboard</h1><div class='stat-grid'>" +
+    Object.keys(stats).map(function (k) {
+      return "<div class='stat'><b>" + stats[k] + "</b><span>" + k.replace(/([A-Z])/g, " $1") + "</span></div>";
+    }).join("") + "</div>";
+}
+
+// ---------- Orders (view-only: confirmation happens via the Flutterwave webhook) ----------
+function renderOrders(main) {
+  main.innerHTML = "<h1>Orders</h1><p style='color:#8b8f9a;font-size:13px'>Orders confirm automatically once Flutterwave verifies payment (webhook). This view is read-only.</p>";
+  var table = document.createElement("table");
+  table.innerHTML = "<tr><th>Order</th><th>Trader</th><th>Plan</th><th>Amount</th><th>Status</th></tr>";
+  state.orders.slice().reverse().forEach(function (o) {
+    var plan = state.plans.find(function (p) { return p.planId === o.planId; }) || {};
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + o.orderId + "</td><td>" + o.telegramId + "</td><td>" + (plan.name || o.planId) + "</td><td>$" + o.amount + "</td><td><span class='badge'>" + o.status + "</span></td>";
+    table.appendChild(tr);
+  });
+  main.appendChild(table);
+}
+
+// ---------- Accounts ----------
+function renderAccounts(main) {
+  main.innerHTML = "<h1>Accounts</h1>";
+  var table = document.createElement("table");
+  table.innerHTML = "<tr><th>Account</th><th>Trader</th><th>Plan</th><th>Phase</th><th>Status</th><th>Actions</th></tr>";
+  state.accounts.slice().reverse().forEach(function (a) {
+    var plan = state.plans.find(function (p) { return p.planId === a.planId; }) || {};
+    var tr = document.createElement("tr");
+    var actionsTd = document.createElement("td");
+    ["passed", "breached", "blown"].forEach(function (status) {
+      var btn = document.createElement("button");
+      btn.className = "btn secondary";
+      btn.textContent = status;
+      btn.onclick = async function () {
+        NF.updateAccountStatus(state, a.accountId, status);
+        await saveAndRender();
+      };
+      actionsTd.appendChild(btn);
+    });
+    if (a.status === "awaiting_credentials") {
+      var issueBtn = document.createElement("button");
+      issueBtn.className = "btn";
+      issueBtn.textContent = "Issue MT5 (manual)";
+      issueBtn.onclick = async function () { await manualIssueCredentials(a); };
+      actionsTd.appendChild(issueBtn);
+    }
+    tr.innerHTML = "<td>" + a.accountId + "</td><td>" + a.telegramId + "</td><td>" + (plan.name || a.planId) + "</td><td>" + a.phase + "</td><td><span class='badge'>" + a.status + "</span></td>";
+    tr.appendChild(actionsTd);
+    table.appendChild(tr);
+  });
+  main.appendChild(table);
+}
+
+// Fallback for when the MT5 pool has no matching slot — same idea as the
+// original manual issueCredentials, just writing to the private file.
+async function manualIssueCredentials(account) {
+  var mt5Login = prompt("MT5 login:");
+  var mt5Password = prompt("MT5 password:");
+  var mt5Server = prompt("MT5 server:");
+  if (!mt5Login || !mt5Password || !mt5Server) return;
+  await ensurePrivate();
+  privateState.accountCredentials.push({ accountId: account.accountId, mt5Login: mt5Login, mt5Password: mt5Password, mt5Server: mt5Server, updatedAt: NF.nowIso() });
+  await NF.savePrivate(privateState);
+  account.status = "active";
+  account.updatedAt = NF.nowIso();
+  NF.notify("mt5CredentialsSent", { telegramId: account.telegramId, mt5Login: mt5Login, mt5Password: mt5Password, mt5Server: mt5Server });
+  await saveAndRender();
+}
+
+// ---------- MT5 Pool ----------
+function renderPool(main) {
+  main.innerHTML = "<h1>MT5 Pool</h1>";
+  var form = document.createElement("div");
+  form.className = "card";
+  form.innerHTML = "<h3>Bulk add logins</h3><p style='color:#8b8f9a;font-size:12px'>One per line: mt5Login,mt5Password,mt5Server,categoryId,accountSize</p>";
+  var textarea = document.createElement("textarea");
+  textarea.rows = 6; textarea.style.width = "100%";
+  textarea.placeholder = "12345,Pass123,broker-live.example.com:443,cat_2step,10000";
+  form.appendChild(textarea);
+  var addBtn = document.createElement("button");
+  addBtn.className = "btn"; addBtn.textContent = "Add to pool";
+  addBtn.onclick = async function () {
+    await ensurePrivate();
+    var lines = textarea.value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
+    var entries = lines.map(function (l) {
+      var parts = l.split(",");
+      return { mt5Login: parts[0], mt5Password: parts[1], mt5Server: parts[2], categoryId: parts[3], accountSize: parts[4] };
+    });
+    NF.addMt5PoolEntries(privateState, entries);
+    await NF.savePrivate(privateState);
+    alert("Added " + entries.length + " logins to the pool.");
+    render();
+  };
+  form.appendChild(addBtn);
+  main.appendChild(form);
+
+  var availDiv = document.createElement("div");
+  availDiv.className = "card";
+  availDiv.innerHTML = "<h3>Availability</h3><div id='pool-avail'>Loading…</div>";
+  main.appendChild(availDiv);
+  ensurePrivate().then(function () {
+    var counts = NF.poolAvailability(privateState);
+    $("#pool-avail").innerHTML = Object.keys(counts).length
+      ? Object.keys(counts).map(function (k) { return "<div>" + k + ": <b>" + counts[k] + "</b> available</div>"; }).join("")
+      : "<span style='color:#8b8f9a'>No available logins in the pool.</span>";
+  });
+}
+
+// ---------- Payouts ----------
+function renderPayouts(main) {
+  main.innerHTML = "<h1>Payouts</h1>";
+  var table = document.createElement("table");
+  table.innerHTML = "<tr><th>Payout</th><th>Trader</th><th>Amount</th><th>Split</th><th>Status</th><th>Actions</th></tr>";
+  state.payouts.slice().reverse().forEach(function (p) {
+    var tr = document.createElement("tr");
+    var actionsTd = document.createElement("td");
+    if (p.status === "requested") {
+      var approveBtn = document.createElement("button");
+      approveBtn.className = "btn"; approveBtn.textContent = "Approve";
+      approveBtn.onclick = async function () { NF.approvePayout(state, p.payoutId); await saveAndRender(); };
+      var rejectBtn = document.createElement("button");
+      rejectBtn.className = "btn danger"; rejectBtn.textContent = "Reject";
+      rejectBtn.onclick = async function () { NF.rejectPayout(state, p.payoutId); await saveAndRender(); };
+      actionsTd.appendChild(approveBtn); actionsTd.appendChild(rejectBtn);
+    } else if (p.status === "approved") {
+      var sendBtn = document.createElement("button");
+      sendBtn.className = "btn"; sendBtn.textContent = "Send";
+      sendBtn.onclick = async function () {
+        sendBtn.disabled = true; sendBtn.textContent = "Sending…";
+        try { await NF.sendPayout(p.payoutId); alert("Transfer initiated."); }
+        catch (ex) { alert("Failed: " + ex.message); }
+        state = await NF.loadPublic();
+        render();
+      };
+      actionsTd.appendChild(sendBtn);
+    }
+    tr.innerHTML = "<td>" + p.payoutId + "</td><td>" + p.telegramId + "</td><td>$" + p.amount + "</td><td>" + p.splitPct + "%</td><td><span class='badge'>" + p.status + "</span></td>";
+    tr.appendChild(actionsTd);
+    table.appendChild(tr);
+  });
+  main.appendChild(table);
+}
+
+// ---------- Plans & Categories ----------
+function renderPlans(main) {
+  main.innerHTML = "<h1>Plans & Categories</h1>";
+
+  var catCard = document.createElement("div");
+  catCard.className = "card";
+  catCard.innerHTML = "<h3>Categories</h3>";
+  var catTable = document.createElement("table");
+  catTable.innerHTML = "<tr><th>Name</th><th>Phases</th><th>ID</th></tr>" + state.accountCategories.map(function (c) {
+    return "<tr><td>" + c.name + "</td><td>" + c.phaseCount + " (0 = instant)</td><td>" + c.categoryId + "</td></tr>";
+  }).join("");
+  catCard.appendChild(catTable);
+  var catName = document.createElement("input"); catName.placeholder = "Category name";
+  var catPhases = document.createElement("input"); catPhases.placeholder = "Phase count (0=instant)"; catPhases.type = "number";
+  var addCatBtn = document.createElement("button"); addCatBtn.className = "btn"; addCatBtn.textContent = "Add category";
+  addCatBtn.onclick = async function () {
+    if (!catName.value) return;
+    NF.createCategory(state, catName.value, parseInt(catPhases.value || "0", 10));
+    await saveAndRender();
+  };
+  catCard.appendChild(catName); catCard.appendChild(catPhases); catCard.appendChild(addCatBtn);
+  main.appendChild(catCard);
+
+  var planCard = document.createElement("div");
+  planCard.className = "card";
+  planCard.innerHTML = "<h3>Plans</h3>";
+  var planTable = document.createElement("table");
+  planTable.innerHTML = "<tr><th>Name</th><th>Category</th><th>Size</th><th>Price</th><th>Active</th><th></th></tr>";
+  state.plans.forEach(function (plan) {
+    var category = state.accountCategories.find(function (c) { return c.categoryId === plan.categoryId; }) || {};
+    var tr = document.createElement("tr");
+    var toggleBtn = document.createElement("button");
+    toggleBtn.className = "btn secondary"; toggleBtn.textContent = plan.active ? "Deactivate" : "Activate";
+    toggleBtn.onclick = async function () { NF.togglePlan(state, plan.planId); await saveAndRender(); };
+    tr.innerHTML = "<td>" + plan.name + "</td><td>" + (category.name || "") + "</td><td>$" + plan.accountSize + "</td><td>$" + plan.price + "</td><td>" + (plan.active ? "yes" : "no") + "</td>";
+    var td = document.createElement("td"); td.appendChild(toggleBtn);
+    tr.appendChild(td);
+    planTable.appendChild(tr);
+  });
+  planCard.appendChild(planTable);
+
+  var catSelect = document.createElement("select");
+  state.accountCategories.forEach(function (c) { var o = document.createElement("option"); o.value = c.categoryId; o.textContent = c.name; catSelect.appendChild(o); });
+  var nameInput = document.createElement("input"); nameInput.placeholder = "Plan name";
+  var sizeInput = document.createElement("input"); sizeInput.placeholder = "Account size"; sizeInput.type = "number";
+  var priceInput = document.createElement("input"); priceInput.placeholder = "Price"; priceInput.type = "number";
+  var addPlanBtn = document.createElement("button"); addPlanBtn.className = "btn"; addPlanBtn.textContent = "Add plan";
+  addPlanBtn.onclick = async function () {
+    if (!nameInput.value || !sizeInput.value || !priceInput.value) return;
+    NF.createPlan(state, { name: nameInput.value, accountSize: parseFloat(sizeInput.value), price: parseFloat(priceInput.value), categoryId: catSelect.value, payoutSplit1: 80, payoutSplitN: 70 });
+    await saveAndRender();
+  };
+  planCard.appendChild(nameInput); planCard.appendChild(sizeInput); planCard.appendChild(priceInput); planCard.appendChild(catSelect); planCard.appendChild(addPlanBtn);
+  main.appendChild(planCard);
+}
+
+// ---------- Discounts ----------
+function renderDiscounts(main) {
+  main.innerHTML = "<h1>Discounts</h1>";
+  var table = document.createElement("table");
+  table.innerHTML = "<tr><th>Code</th><th>Type</th><th>Value</th><th>Used</th><th>Active</th><th></th></tr>";
+  state.discounts.forEach(function (c) {
+    var tr = document.createElement("tr");
+    var toggleBtn = document.createElement("button");
+    toggleBtn.className = "btn secondary"; toggleBtn.textContent = c.active ? "Deactivate" : "Activate";
+    toggleBtn.onclick = async function () { NF.toggleDiscount(state, c.codeId); await saveAndRender(); };
+    tr.innerHTML = "<td>" + c.code + "</td><td>" + c.discountType + "</td><td>" + c.discountValue + "</td><td>" + (c.usedCount || 0) + "/" + (c.maxUses || "∞") + "</td><td>" + (c.active ? "yes" : "no") + "</td>";
+    var td = document.createElement("td"); td.appendChild(toggleBtn); tr.appendChild(td);
+    table.appendChild(tr);
+  });
+  main.appendChild(table);
+
+  var form = document.createElement("div"); form.className = "card";
+  var codeInput = document.createElement("input"); codeInput.placeholder = "CODE";
+  var typeSelect = document.createElement("select");
+  ["pct", "fixed"].forEach(function (t) { var o = document.createElement("option"); o.value = t; o.textContent = t; typeSelect.appendChild(o); });
+  var valueInput = document.createElement("input"); valueInput.placeholder = "Value"; valueInput.type = "number";
+  var maxUsesInput = document.createElement("input"); maxUsesInput.placeholder = "Max uses (0 = unlimited)"; maxUsesInput.type = "number";
+  var addBtn = document.createElement("button"); addBtn.className = "btn"; addBtn.textContent = "Create";
+  addBtn.onclick = async function () {
+    if (!codeInput.value || !valueInput.value) return;
+    NF.createDiscount(state, { code: codeInput.value.toUpperCase(), discountType: typeSelect.value, discountValue: parseFloat(valueInput.value), maxUses: parseInt(maxUsesInput.value || "0", 10) });
+    await saveAndRender();
+  };
+  form.appendChild(codeInput); form.appendChild(typeSelect); form.appendChild(valueInput); form.appendChild(maxUsesInput); form.appendChild(addBtn);
+  main.appendChild(form);
+}
+
+// ---------- Support ----------
+function renderSupport(main) {
+  main.innerHTML = "<h1>Support</h1>";
+  state.support.filter(function (t) { return t.status === "open"; }).forEach(function (t) {
+    var card = document.createElement("div"); card.className = "card";
+    card.innerHTML = "<b>" + t.subject + "</b> — " + t.telegramId;
+    var msgs = state.messages.filter(function (m) { return m.threadId === t.threadId; });
+    msgs.forEach(function (m) { card.innerHTML += "<div style='color:#8b8f9a;font-size:13px'>" + (m.senderRole === "admin" ? "Admin: " : "Trader: ") + m.body + "</div>"; });
+    var reply = document.createElement("input"); reply.placeholder = "Reply…";
+    var sendBtn = document.createElement("button"); sendBtn.className = "btn"; sendBtn.textContent = "Reply";
+    sendBtn.onclick = async function () {
+      if (!reply.value) return;
+      NF.replyThread(state, t.threadId, "admin", "admin", reply.value);
+      await saveAndRender();
+    };
+    var closeBtn = document.createElement("button"); closeBtn.className = "btn secondary"; closeBtn.textContent = "Close";
+    closeBtn.onclick = async function () { t.status = "closed"; t.updatedAt = NF.nowIso(); await saveAndRender(); };
+    card.appendChild(reply); card.appendChild(sendBtn); card.appendChild(closeBtn);
+    main.appendChild(card);
+  });
+}
+
+// ---------- Users ----------
+function renderUsers(main) {
+  main.innerHTML = "<h1>Users</h1>";
+  var table = document.createElement("table");
+  table.innerHTML = "<tr><th>Telegram ID</th><th>Username</th><th>Referral code</th><th>Joined</th></tr>";
+  state.users.slice().reverse().forEach(function (u) {
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td>" + u.telegramId + "</td><td>" + (u.username || "") + "</td><td>" + u.referralCode + "</td><td>" + (u.createdAt || "").slice(0, 10) + "</td>";
+    table.appendChild(tr);
+  });
+  main.appendChild(table);
+}
+
+boot();
+</script>
+</body>
+</html>
