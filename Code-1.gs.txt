@@ -1,0 +1,89 @@
+// ===== NOW FUNDED — BACKEND =====
+// Dumb file store, exposed as a plain JSON HTTP API (frontend is hosted on GitHub,
+// a different origin, so it talks to this via fetch(), not google.script.run).
+// GET  ?action=read  -> returns the whole state as JSON
+// POST body=JSON     -> overwrites the whole state
+// No auth, no validation, no per-field logic — all business logic lives in the frontend.
+
+var FILE_NAME = 'nnnn.json';
+
+function doGet(e) {
+  var data = readData_();
+  return jsonOut_(data);
+}
+
+function doPost(e) {
+  var body = e && e.postData ? e.postData.contents : '{}';
+  writeData_(body);
+  return jsonOut_(JSON.stringify({ ok: true }));
+}
+
+function jsonOut_(text) {
+  return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Looks up nnnn.json in Drive root. Returns null if it doesn't exist yet —
+// does NOT create it. Creation only happens on the first actual write
+// (i.e. the first time a user signs up / logs data), not on page load.
+function findFile_() {
+  var files = DriveApp.getFilesByName(FILE_NAME);
+  return files.hasNext() ? files.next() : null;
+}
+
+// If the file doesn't exist yet (no one has signed up/written anything),
+// hands back the default seed state without creating anything in Drive.
+function readData_() {
+  var file = findFile_();
+  if (!file) return JSON.stringify(defaultState_());
+  var text = file.getBlob().getDataAsString();
+  return text || JSON.stringify(defaultState_());
+}
+
+// Full overwrite — last write wins. No validation, no merge.
+// Creates nnnn.json here, on the first real write (e.g. first user signup).
+function writeData_(jsonString) {
+  var file = findFile_();
+  if (!file) {
+    file = DriveApp.createFile(FILE_NAME, jsonString, MimeType.PLAIN_TEXT);
+  } else {
+    file.setContent(jsonString);
+  }
+  return true;
+}
+
+function defaultState_() {
+  return {
+    settings: {
+      accessCode: 'admin123',
+      bank: { name: '', accountNumber: '', accountName: '', instructions: 'Transfer the exact amount and include your order code in the narration.' },
+      stats: { tradersCount: 565, totalPayouts: 5000000 },
+      affiliateDiscountRate: 20,
+      affiliateCommissionRate: 10,
+      minPayout: 5000,
+      minAffiliatePayout: 5000,
+      lowStockThreshold: 5
+    },
+    drawdownTypes: [
+      { id: 'dd_equity', name: 'Equity-Based EOD Drawdown', description: 'Your end-of-day equity (including floating P&L) must stay above the drawdown line.' },
+      { id: 'dd_balance', name: 'Balance-Based EOD Drawdown', description: 'Only your end-of-day closed balance is checked — floating losses overnight don\'t count against you.' }
+    ],
+    planTypes: [
+      { id: 'pt_2step', name: '2-Step' },
+      { id: 'pt_1step', name: '1-Step' },
+      { id: 'pt_instant', name: 'Instant Funding' }
+    ],
+    plans: [],
+    mt5Pool: [],
+    discountCodes: [],
+    users: [],
+    orders: [],
+    traderAccounts: [],
+    payoutRequests: [],
+    certificates: [],
+    testimonials: [],
+    faqs: [],
+    notifications: [],
+    activityLog: [],
+    chatMessages: []
+  };
+}
