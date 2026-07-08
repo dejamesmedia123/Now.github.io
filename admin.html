@@ -3,32 +3,45 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Now Funded — Admin</title>
 <style>
-  :root{--bg:#0A0F1F;--bg2:#0d1428;--panel:rgba(255,255,255,0.045);--panel2:rgba(255,255,255,0.06);--line:rgba(255,255,255,0.09);--text:#eef2fa;--muted:#8b96b3;--accent:#3B82F6;--accent2:#10B981;--gold:#FBBF24;--danger:#ef4444;--warn:#f59e0b;}
+  :root{--bg:#0A0E13;--bg2:#0F1721;--panel:rgba(255,255,255,0.05);--panel2:rgba(255,255,255,0.09);--line:rgba(255,255,255,0.14);--text:#F2F5F8;--muted:#8D9AAC;--accent:#1FD8A6;--accent2:#3FA9F5;--gold:#F5B942;--danger:#FF6B6B;--warn:#F5B942;--btn-text:#03130E;}
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:radial-gradient(1200px 600px at 50% -10%,var(--bg2),var(--bg));color:var(--text)}
-  .nav{display:flex;gap:12px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(10,15,31,0.7);backdrop-filter:blur(10px);z-index:10}
-  .nav span{cursor:pointer;color:var(--muted);font-size:13px;padding:6px 10px;border-radius:8px;transition:.15s}
-  .nav span.active,.nav span:hover{color:var(--text);background:var(--panel2)}
+  .nav{display:flex;gap:12px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(10,14,19,0.7);backdrop-filter:blur(10px);z-index:10}
+  .nav span{cursor:pointer;color:var(--muted);font-size:13px;padding:6px 10px;border-radius:8px;transition:.15s;white-space:nowrap;flex-shrink:0}
+  .nav span.active,.nav span:hover{color:var(--accent);background:var(--panel2)}
   .wrap{max-width:1000px;margin:0 auto;padding:20px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;backdrop-filter:blur(8px)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px;backdrop-filter:blur(8px);overflow-x:auto}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
   input,select,textarea{width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);margin-bottom:8px;font-size:13px}
   label{font-size:11px;color:var(--muted);display:block;margin-bottom:3px}
-  .btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#04150a;border:none;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px}
-  .btn.danger{background:var(--danger);color:#fff}
-  .btn.warn{background:var(--warn);color:#1a1200}
+  .btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--btn-text);border:none;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px}
+  .btn.danger{background:transparent;border:1px solid var(--danger);color:var(--danger)}
+  .btn.warn{background:var(--panel2);border:1px solid var(--gold);color:var(--gold)}
   .btn.small{padding:5px 10px;font-size:12px}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
-  .badge{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
-  .b-pending{background:#78350f;color:#fcd34d}
-  .b-confirmed{background:#14532d;color:#86efac}
-  .b-rejected,.b-closed{background:#450a0a;color:#fca5a5}
-  .alert{background:#450a0a;color:#fecaca;padding:10px;border-radius:10px;margin-bottom:10px;font-size:13px}
+  table{width:100%;min-width:480px;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .badge{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;border:1px solid var(--line)}
+  .b-pending{background:transparent;color:var(--gold);border:1px dashed var(--gold)}
+  .b-confirmed{background:var(--accent);color:var(--btn-text);border-color:transparent}
+  .b-rejected,.b-closed{background:transparent;color:var(--muted);border:1px solid var(--line);text-decoration:line-through}
+  .alert{background:rgba(255,107,107,.12);color:var(--danger);border:1px solid var(--danger);padding:10px;border-radius:10px;margin-bottom:10px;font-size:13px}
   .muted{color:var(--muted);font-size:12px}
+  .kv{font-size:13px;margin:4px 0;color:var(--muted)}
+  .kv b{color:var(--text)}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
   h2{margin-top:0}
+  textarea.rawjson{font-family:monospace;font-size:12px;min-height:260px}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  @media (max-width:560px){
+    .wrap{padding:12px}
+    .card{padding:12px;border-radius:12px}
+    .field-row{grid-template-columns:1fr}
+    input,select,textarea{font-size:16px} /* prevents iOS Safari auto-zoom on focus */
+    .btn{padding:10px 14px}
+  }
 </style>
 </head>
 <body>
@@ -37,6 +50,9 @@
 <script>
 // PASTE YOUR DEPLOYED APPS SCRIPT WEB APP URL HERE (ends in /exec) — same URL as App.html uses
 var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwrtEit40wugkoqeu4RBm0xJmE7ow1oRidK-jHfdvdTAcKF1O9svkbCXFb87Wa1C8tTqQ/exec';
+// Separate Apps Script project/deployment — just sends email, shares nothing with WEBAPP_URL.
+// Paste the /exec URL from deploying email.gs as its own web app.
+var EMAIL_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzYVMNktyZHhBB1tHozbjLR8yjDIhh807DQThcV8-ms3dLqATpk7WN10wTPPcLzPE3f/exec';
 
 var STATE=null, tab='orders', gateOk=false;
 function boot(){
@@ -51,20 +67,81 @@ function save(cb){
     .then(function(){ if(cb) cb(); render(); })
     .catch(function(err){ alert('Save failed: '+err); });
 }
+// Fire-and-forget email relay — mirrors App.html's sendMail(). Admin builds the message,
+// backend (email.gs) just sends it. Never blocks/alerts on failure.
+function sendMail(to, subject, body){
+  if(!STATE.settings.emailNotificationsEnabled) return;
+  if(!to || !subject || !body) return;
+  fetch(EMAIL_WEBAPP_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({ to: to, subject: subject, body: body })
+  }).catch(function(err){ console.warn('Email send failed:', err); });
+}
+function userEmail_(userId){ var u = STATE.users.find(function(x){return x.id===userId;}); return u ? u.email : ''; }
 function uid(p){ return p+'_'+Math.random().toString(36).slice(2,9); }
 function naira(n){ return '₦'+Number(n||0).toLocaleString(); }
 function log(action,details){ STATE.activityLog.push({id:uid('lg'),actor:'admin',action:action,details:details,createdAt:new Date().toISOString()}); }
+// Tier lookup, mirroring App.html's version — needed here too since commission is
+// actually credited in confirmOrder(), which lives in this file.
+function affReferredConverted_(u){
+  return STATE.users.filter(function(x){return x.referredBy===u.id;}).filter(function(x){
+    return STATE.orders.some(function(o){return o.userId===x.id && o.status==='confirmed';});
+  }).length;
+}
+function affCurrentTier_(u){
+  var tiers = (STATE.settings.affiliateTiers||[]).slice().sort(function(a,b){return a.minReferrals-b.minReferrals;});
+  var converted = affReferredConverted_(u);
+  var current = tiers[0], next = null;
+  tiers.forEach(function(t){ if(converted>=t.minReferrals) current=t; });
+  for(var i=0;i<tiers.length;i++){ if(tiers[i].minReferrals>converted){ next=tiers[i]; break; } }
+  return {tiers:tiers, current:current||{name:'Affiliate Starter',commissionPct:15}, next:next, converted:converted};
+}
 
 function render(){
   if(!gateOk) return renderGate();
   if(!STATE.chatMessages) STATE.chatMessages = [];
-  STATE.users.forEach(function(u){ if(u.kycStatus===undefined) u.kycStatus='none'; if(u.kycCountry===undefined) u.kycCountry=''; if(u.kycIdNumber===undefined) u.kycIdNumber=''; });
-  var tabs=['orders','plans','pool','codes','payouts','affiliate','content','chat','kyc','analytics','settings'];
-  document.getElementById('nav').innerHTML = tabs.map(function(t){return '<span class="'+(t===tab?'active':'')+'" onclick="setTab(\''+t+'\')">'+t+(t==='chat'?chatBadge_():'')+'</span>';}).join('');
-  document.getElementById('app').innerHTML = ({
+  if(!STATE.supportTickets) STATE.supportTickets = [];
+  STATE.users.forEach(function(u){ if(u.kycStatus===undefined) u.kycStatus='none'; if(u.kycCountry===undefined) u.kycCountry=''; if(u.kycIdNumber===undefined) u.kycIdNumber=''; if(u.bookStage===undefined) u.bookStage='bbook'; });
+  if(STATE.settings.referralDiscountScope===undefined) STATE.settings.referralDiscountScope='every';
+  if(STATE.settings.profitSplitPct===undefined) STATE.settings.profitSplitPct=80;
+  if(STATE.settings.kycFormUrl===undefined) STATE.settings.kycFormUrl='';
+  if(STATE.settings.adminEmail===undefined) STATE.settings.adminEmail='';
+  if(STATE.settings.emailNotificationsEnabled===undefined) STATE.settings.emailNotificationsEnabled=true;
+  if(!STATE.settings.seo) STATE.settings.seo = {
+    title: 'Now Funded — Get Funded. Trade With Clear Daily Limits.',
+    description: 'Pass a Now Funded trading challenge and get a funded MT5 account with clear end-of-day drawdown limits, instant funding options, and fast payouts.',
+    keywords: 'prop firm, funded trading account, forex challenge, MT5 funding, get funded to trade',
+    ogImage: '',
+    favicon: '',
+    canonicalUrl: '',
+    siteName: 'Now Funded'
+  };
+  if(!STATE.settings.affiliateToolkit) STATE.settings.affiliateToolkit=[];
+  if(!STATE.settings.customAlerts) STATE.settings.customAlerts=[];
+  if(!STATE.accountTransfers) STATE.accountTransfers=[];
+  if(!STATE.bookStages || !STATE.bookStages.length) STATE.bookStages=[
+    { id: 'bbook', name: 'B-Book (Simulation)', description: 'Every account starts here. Trades run in a simulated environment — no real money moves, but your rules, targets, and drawdown all apply exactly as normal.' },
+    { id: 'hbook', name: 'H-Book (Hybrid)', description: 'Unlocked once your trading behavior is proven consistent. We begin blending in live-market execution alongside simulation.' },
+    { id: 'inhouse', name: 'In-House Trader', description: "You're invited to trade our real capital directly and earn a salary on top of your profit share — not just a funded account anymore, effectively an employed trader." }
+  ];
+  if(!STATE.settings.affiliateTiers || !STATE.settings.affiliateTiers.length) STATE.settings.affiliateTiers=[
+    { id:'tier_starter', name:'Affiliate Starter', minReferrals:0, commissionPct:STATE.settings.affiliateCommissionRate||15 },
+    { id:'tier_rising', name:'Rising Star', minReferrals:5, commissionPct:STATE.settings.affiliateCommissionRate||15 },
+    { id:'tier_champion', name:'Now Funded Champion', minReferrals:45, commissionPct:18 },
+    { id:'tier_elite', name:'Elite Ambassador', minReferrals:60, commissionPct:20 },
+    { id:'tier_partner', name:'Now Funded Partner', minReferrals:80, commissionPct:25 }
+  ];
+  var tabs=['orders','plans','pool','codes','payouts','affiliate','tiers','users','transfers','promotions','alerts','content','avatars','tickets','kyc','analytics','seo','settings','database'];
+  if(!STATE.settings.avatarLibrary) STATE.settings.avatarLibrary = [];
+  document.getElementById('nav').innerHTML = tabs.map(function(t){return '<span class="'+(t===tab?'active':'')+'" onclick="setTab(\''+t+'\')">'+t+(t==='tickets'?ticketBadge_():'')+'</span>';}).join('');
+  var emailWarning = (STATE.settings.emailNotificationsEnabled && !STATE.settings.adminEmail) ?
+    '<div class="alert"><b>No admin notification email is set.</b> Every admin email — new orders, payout requests, support tickets, KYC submissions — is silently going nowhere. <span style="text-decoration:underline;cursor:pointer" onclick="setTab(\'settings\')">Set one in Settings</span>.</div>' : '';
+  document.getElementById('app').innerHTML = emailWarning + ({
     orders: renderOrders, plans: renderPlans, pool: renderPool, codes: renderCodes,
-    payouts: renderPayouts, affiliate: renderAffiliate, content: renderContent,
-    chat: renderChatTab, kyc: renderKyc, analytics: renderAnalytics, settings: renderSettings
+    payouts: renderPayouts, affiliate: renderAffiliate, tiers: renderTiers, users: renderUsers, transfers: renderTransfers, promotions: renderPromotions, alerts: renderAlerts, content: renderContent,
+    tickets: renderTicketsTab, kyc: renderKyc, analytics: renderAnalytics, seo: renderSeo, settings: renderSettings,
+    avatars: renderAvatars, database: renderDatabase
   })[tab]();
 }
 function setTab(t){ tab=t; render(); }
@@ -117,6 +194,10 @@ function confirmOrder(orderId){
   if(!login) return alert('No unused MT5 login in this category. Upload more logins first.');
   login.used = true; login.assignedTo = order.userId;
   order.status='confirmed'; order.confirmedAt=new Date().toISOString();
+  if(order.discountCode){
+    var dc = STATE.discountCodes.find(function(d){return d.code===order.discountCode;});
+    if(dc) dc.usedCount = (dc.usedCount||0) + 1;
+  }
   var profitTargetPct = pctFromRules_(plan.rules, 'profit target');
   var maxDrawdownPct = pctFromRules_(plan.rules, 'max drawdown') || pctFromRules_(plan.rules, 'max overall drawdown');
   var acc = {id:uid('ta'),userId:order.userId,orderId:order.id,mt5PoolId:login.id,login:login.login,password:login.password,server:login.server,
@@ -125,6 +206,23 @@ function confirmOrder(orderId){
     balanceHistory:[],poolReturned:false,createdAt:new Date().toISOString()};
   STATE.traderAccounts.push(acc);
   STATE.notifications.push({id:uid('nt'),userId:order.userId,message:'Your order '+order.orderCode+' was confirmed. MT5 login assigned!',read:false,createdAt:new Date().toISOString()});
+  sendMail(userEmail_(order.userId), 'Your order '+order.orderCode+' was confirmed', 'Good news — your order '+order.orderCode+' has been confirmed and an MT5 login has been assigned. Log in to your dashboard to view your account details.');
+  // Credit affiliate commission now that the purchase is confirmed as real (paid) —
+  // this is the only point a referred user's order is verified, so it's the only
+  // correct place to pay the referrer for it.
+  var buyer = STATE.users.find(function(x){return x.id===order.userId;});
+  if(buyer && buyer.referredBy){
+    var referrer = STATE.users.find(function(x){return x.id===buyer.referredBy;});
+    if(referrer){
+      var commissionPct = affCurrentTier_(referrer).current.commissionPct || 0;
+      var commission = Math.round((order.amount||0) * commissionPct / 100);
+      if(commission > 0){
+        referrer.affiliateEarnings = (referrer.affiliateEarnings||0) + commission;
+        STATE.notifications.push({id:uid('nt'),userId:referrer.id,message:'You earned '+naira(commission)+' commission ('+commissionPct+'%) from a referred purchase.',read:false,createdAt:new Date().toISOString()});
+        log('credit_commission', referrer.email+' +'+naira(commission)+' at '+commissionPct+'% (order '+order.orderCode+')');
+      }
+    }
+  }
   log('confirm_order', order.orderCode);
   save();
 }
@@ -132,6 +230,7 @@ function rejectOrder(orderId){
   var order = STATE.orders.find(function(o){return o.id===orderId;});
   order.status='rejected';
   STATE.notifications.push({id:uid('nt'),userId:order.userId,message:'Your order '+order.orderCode+' was rejected — no matching payment found.',read:false,createdAt:new Date().toISOString()});
+  sendMail(userEmail_(order.userId), 'Your order '+order.orderCode+' was rejected', 'Your order '+order.orderCode+' was rejected — we couldn\'t find a matching payment. If you believe this is an error, please open a support ticket.');
   log('reject_order', order.orderCode);
   save();
 }
@@ -157,11 +256,20 @@ function renderPlans(){
   var rows = STATE.plans.map(function(p){
     var dd=STATE.drawdownTypes.find(function(d){return d.id===p.drawdownTypeId;})||{};
     var pt=STATE.planTypes.find(function(t){return t.id===p.planTypeId;})||{};
-    return '<tr><td>'+p.name+'</td><td>'+(dd.name||'-')+'</td><td>'+(pt.name||'-')+'</td><td>'+p.category+'</td><td>'+naira(p.price)+'</td><td><button class="btn small danger" onclick="delPlan(\''+p.id+'\')">Del</button></td></tr>';
+    return '<tr><td>'+p.name+'</td><td>'+(dd.name||'-')+'</td><td>'+(pt.name||'-')+'</td><td>'+p.category+'</td><td>'+naira(p.price)+'</td>'+
+      '<td><button class="btn small" onclick="editPlan(\''+p.id+'\')">Edit</button> <button class="btn small danger" onclick="delPlan(\''+p.id+'\')">Del</button></td></tr>';
   }).join('');
-  return '<h2>Drawdown Types</h2><div class="card grid">'+STATE.drawdownTypes.map(function(d){return '<div><b>'+d.name+'</b><div class="muted">'+d.description+'</div></div>';}).join('')+
+  var ddRows = STATE.drawdownTypes.map(function(d){
+    return '<div class="row" style="border-bottom:1px solid var(--line);padding:6px 0"><div><b>'+d.name+'</b><div class="muted">'+d.description+'</div></div>'+
+      '<div><button class="btn small" onclick="editDD(\''+d.id+'\')">Edit</button> <button class="btn small danger" onclick="delDD(\''+d.id+'\')">Del</button></div></div>';
+  }).join('');
+  var ptRows = STATE.planTypes.map(function(p){
+    return '<div class="row" style="border-bottom:1px solid var(--line);padding:6px 0"><span class="badge b-confirmed">'+p.name+'</span>'+
+      '<div><button class="btn small" onclick="editPT(\''+p.id+'\')">Edit</button> <button class="btn small danger" onclick="delPT(\''+p.id+'\')">Del</button></div></div>';
+  }).join('');
+  return '<h2>Drawdown Types</h2><div class="card">'+(ddRows||'<div class="muted">None yet</div>')+
     '</div><div class="card"><input id="dd_name" placeholder="New drawdown type name"><input id="dd_desc" placeholder="Description"><button class="btn" onclick="addDD()">Add Drawdown Type</button></div>'+
-    '<h2>Plan Types</h2><div class="card">'+STATE.planTypes.map(function(p){return '<span class="badge b-confirmed" style="margin-right:6px">'+p.name+'</span>';}).join('')+
+    '<h2>Plan Types</h2><div class="card">'+(ptRows||'<div class="muted">None yet</div>')+
     '<div style="margin-top:8px"><input id="pt_name" placeholder="New plan type name"><button class="btn" onclick="addPT()">Add Plan Type</button></div></div>'+
     '<h2>Plans</h2><div class="card"><table><tr><th>Name</th><th>Drawdown</th><th>Type</th><th>Category</th><th>Price</th><th></th></tr>'+rows+'</table></div>'+
     '<div class="card"><h4>Add Plan</h4><label>Name</label><input id="p_name"><label>Drawdown Type</label><select id="p_dd">'+ddOpts+'</select>'+
@@ -172,7 +280,37 @@ function renderPlans(){
     '<button class="btn" onclick="addPlan()">Add Plan</button></div>';
 }
 function addDD(){ STATE.drawdownTypes.push({id:uid('dd'),name:document.getElementById('dd_name').value,description:document.getElementById('dd_desc').value}); save(); }
+function editDD(id){
+  var d = STATE.drawdownTypes.find(function(x){return x.id===id;});
+  var name = prompt('Drawdown type name', d.name);
+  if(name===null) return;
+  var desc = prompt('Description', d.description);
+  if(desc===null) return;
+  d.name = name; d.description = desc;
+  save();
+}
+function delDD(id){
+  var inUse = STATE.plans.filter(function(p){return p.drawdownTypeId===id;}).length;
+  if(inUse && !confirm(inUse+' plan(s) use this drawdown type. Delete anyway? Those plans will show a blank drawdown type until reassigned.')) return;
+  if(!inUse && !confirm('Delete this drawdown type?')) return;
+  STATE.drawdownTypes = STATE.drawdownTypes.filter(function(x){return x.id!==id;});
+  save();
+}
 function addPT(){ STATE.planTypes.push({id:uid('pt'),name:document.getElementById('pt_name').value}); save(); }
+function editPT(id){
+  var p = STATE.planTypes.find(function(x){return x.id===id;});
+  var name = prompt('Plan type name', p.name);
+  if(name===null) return;
+  p.name = name;
+  save();
+}
+function delPT(id){
+  var inUse = STATE.plans.filter(function(p){return p.planTypeId===id;}).length;
+  if(inUse && !confirm(inUse+' plan(s) use this plan type. Delete anyway? Those plans will show a blank plan type until reassigned.')) return;
+  if(!inUse && !confirm('Delete this plan type?')) return;
+  STATE.planTypes = STATE.planTypes.filter(function(x){return x.id!==id;});
+  save();
+}
 function addPlan(){
   var rulesText = document.getElementById('p_rules').value.trim();
   var rules = rulesText ? rulesText.split('\n').map(function(l){var parts=l.split(':'); return {label:(parts[0]||'').trim(),value:(parts[1]||'').trim()};}) : [];
@@ -181,18 +319,51 @@ function addPlan(){
     price:Number(document.getElementById('p_price').value),rules:rules,popular:document.getElementById('p_popular').checked});
   save();
 }
+function editPlan(id){
+  var p = STATE.plans.find(function(x){return x.id===id;});
+  var name = prompt('Plan name', p.name);
+  if(name===null) return;
+  var category = prompt('Category tag (must match an MT5 pool category)', p.category);
+  if(category===null) return;
+  var price = prompt('Price (₦)', p.price);
+  if(price===null) return;
+  var size = prompt('Account size', p.size);
+  if(size===null) return;
+  p.name = name; p.category = category; p.price = Number(price)||0; p.size = Number(size)||0;
+  save();
+}
 function delPlan(id){ STATE.plans = STATE.plans.filter(function(p){return p.id!==id;}); save(); }
 
 // ---------- MT5 POOL ----------
+var poolShowAdvanced = false;
 function renderPool(){
   var counts = {};
   STATE.mt5Pool.forEach(function(l){ counts[l.category]=counts[l.category]||{used:0,unused:0}; counts[l.category][l.used?'used':'unused']++; });
   var countHtml = Object.keys(counts).map(function(c){return '<div class="kv">'+c+': '+counts[c].unused+' unused / '+counts[c].used+' used</div>';}).join('');
   var rows = STATE.mt5Pool.slice(-100).reverse().map(function(l){return '<tr><td>'+l.login+'</td><td>'+l.category+'</td><td>'+(l.used?'Used':'Unused')+'</td></tr>';}).join('');
-  return '<h2>MT5 Login Pool</h2><div class="card">'+countHtml+'</div>'+
-    '<div class="card"><h4>Paste/Upload JSON</h4><textarea id="pool_json" rows="6" placeholder=\'[{"login":"1001","password":"abc","server":"NF-Live","category":"equity-2step-10k"}]\'></textarea>'+
-    '<button class="btn" onclick="addPool()">Add to Pool</button></div>'+
+  var categoryOpts = Array.from(new Set(STATE.plans.map(function(p){return p.category;}).filter(Boolean)));
+  var catDatalist = '<datalist id="pool_cat_list">'+categoryOpts.map(function(c){return '<option value="'+c+'">';}).join('')+'</datalist>';
+  return '<h2>MT5 Login Pool</h2><div class="card">'+(countHtml||'<div class="muted">No logins added yet.</div>')+'</div>'+
+    '<div class="card"><h4>Add a Login</h4>'+catDatalist+
+    '<div class="field-row"><div><label>Login</label><input id="pf_login" placeholder="e.g. 1005812"></div><div><label>Password</label><input id="pf_password" placeholder="Investor/master password"></div></div>'+
+    '<div class="field-row"><div><label>Server</label><input id="pf_server" placeholder="e.g. NF-Live"></div><div><label>Category</label><input id="pf_category" list="pool_cat_list" placeholder="Must match a plan category"></div></div>'+
+    '<button class="btn" style="width:100%" onclick="addPoolLogin()">Add to Pool</button>'+
+    '<div class="muted" style="margin-top:8px;cursor:pointer" onclick="poolShowAdvanced=!poolShowAdvanced;render()">'+(poolShowAdvanced?'▾ Hide':'▸ Show')+' advanced: bulk-paste JSON</div>'+
+    (poolShowAdvanced? '<div style="margin-top:8px"><textarea id="pool_json" rows="6" placeholder=\'[{"login":"1001","password":"abc","server":"NF-Live","category":"equity-2step-10k"}]\'></textarea>'+
+      '<button class="btn warn" onclick="addPool()">Add Bulk JSON</button></div>' : '')+
+    '</div>'+
     '<div class="card"><table><tr><th>Login</th><th>Category</th><th>Status</th></tr>'+rows+'</table></div>';
+}
+function addPoolLogin(){
+  var login = document.getElementById('pf_login').value.trim();
+  var password = document.getElementById('pf_password').value.trim();
+  var server = document.getElementById('pf_server').value.trim();
+  var category = document.getElementById('pf_category').value.trim();
+  if(!login || !password || !server || !category) return alert('Fill in all fields');
+  STATE.mt5Pool.push({id:uid('m5'),login:login,password:password,server:server,category:category,used:false,assignedTo:null});
+  log('add_pool', '1 login ('+category+')');
+  ['pf_login','pf_password','pf_server','pf_category'].forEach(function(id){ document.getElementById(id).value=''; });
+  save();
 }
 function addPool(){
   try{
@@ -215,12 +386,84 @@ function renderCodes(){
 }
 function addCode(){
   var sel = Array.from(document.getElementById('dc_scope').selectedOptions).map(function(o){return o.value;});
-  STATE.discountCodes.push({code:document.getElementById('dc_code').value.trim(),type:document.getElementById('dc_type').value,
+  var code = document.getElementById('dc_code').value.trim();
+  if(!code) return alert('Enter a code.');
+  var dup = STATE.discountCodes.some(function(d){ return d.code.trim().toLowerCase()===code.toLowerCase(); });
+  if(dup) return alert('A discount code "'+code+'" already exists. Choose a different code, or toggle the existing one instead.');
+  STATE.discountCodes.push({code:code,type:document.getElementById('dc_type').value,
     value:Number(document.getElementById('dc_value').value),scope:sel.length?sel:'all',usageLimit:Number(document.getElementById('dc_limit').value),
     usedCount:0,perUserLimit:Number(document.getElementById('dc_peruser').value),expiryDate:document.getElementById('dc_expiry').value,active:true});
+  log('add_discount_code', code);
   save();
 }
 function toggleCode(code){ var d=STATE.discountCodes.find(function(x){return x.code===code;}); d.active=!d.active; save(); }
+
+function renderTiers(){
+  var tiers = (STATE.settings.affiliateTiers||[]).slice().sort(function(a,b){return a.minReferrals-b.minReferrals;});
+  var rows = tiers.map(function(t){
+    return '<tr><td>'+t.name+'</td><td>'+t.minReferrals+'</td><td>'+t.commissionPct+'%</td>'+
+      '<td><button class="btn small" onclick="editTier(\''+t.id+'\')">Edit</button> <button class="btn small danger" onclick="deleteTier(\''+t.id+'\')">Delete</button></td></tr>';
+  }).join('');
+  return '<h2>Affiliate Tiers</h2>'+
+    '<div class="card muted">Commission is credited at the referrer\'s current tier rate, based on how many of their referrals have a confirmed (paid) order at the moment a new referral converts. Keep one tier at 0 referrals so every affiliate always matches a rate.</div>'+
+    '<div class="card"><table><tr><th>Name</th><th>Min Converted Referrals</th><th>Commission %</th><th></th></tr>'+
+    (rows||'<tr><td colspan="4" class="muted" style="text-align:center">No tiers yet</td></tr>')+'</table></div>'+
+    '<div class="card"><h4>Add / Edit Tier</h4>'+
+    '<input type="hidden" id="tier_id" value="">'+
+    '<label>Name</label><input id="tier_name">'+
+    '<label>Min Converted Referrals</label><input id="tier_min" type="number" value="0">'+
+    '<label>Commission %</label><input id="tier_pct" type="number" value="15">'+
+    '<button class="btn" onclick="saveTier()">Save Tier</button> <button class="btn ghost" onclick="clearTierForm()">Clear</button></div>';
+}
+function clearTierForm(){
+  document.getElementById('tier_id').value='';
+  document.getElementById('tier_name').value='';
+  document.getElementById('tier_min').value=0;
+  document.getElementById('tier_pct').value=15;
+}
+function editTier(id){
+  var t = (STATE.settings.affiliateTiers||[]).find(function(x){return x.id===id;});
+  if(!t) return;
+  document.getElementById('tier_id').value=t.id;
+  document.getElementById('tier_name').value=t.name;
+  document.getElementById('tier_min').value=t.minReferrals;
+  document.getElementById('tier_pct').value=t.commissionPct;
+}
+function saveTier(){
+  var id = document.getElementById('tier_id').value;
+  var name = document.getElementById('tier_name').value.trim();
+  var min = Number(document.getElementById('tier_min').value);
+  var pct = Number(document.getElementById('tier_pct').value);
+  if(!name) return alert('Enter a tier name.');
+  if(isNaN(min) || min<0) return alert('Min referrals must be 0 or more.');
+  if(isNaN(pct) || pct<0 || pct>100) return alert('Commission % must be between 0 and 100.');
+  if(!STATE.settings.affiliateTiers) STATE.settings.affiliateTiers=[];
+  if(id){
+    var t = STATE.settings.affiliateTiers.find(function(x){return x.id===id;});
+    if(!t) return alert('That tier no longer exists.');
+    var dupMin = STATE.settings.affiliateTiers.some(function(x){return x.id!==id && x.minReferrals===min;});
+    if(dupMin) return alert('Another tier already starts at '+min+' referrals — thresholds must be unique.');
+    t.name=name; t.minReferrals=min; t.commissionPct=pct;
+  } else {
+    var dupMin2 = STATE.settings.affiliateTiers.some(function(x){return x.minReferrals===min;});
+    if(dupMin2) return alert('A tier already starts at '+min+' referrals — edit it instead of adding a duplicate.');
+    STATE.settings.affiliateTiers.push({id:uid('tier'), name:name, minReferrals:min, commissionPct:pct});
+  }
+  log('save_tier', name+' ('+min+'+ referrals, '+pct+'%)');
+  save(function(){ clearTierForm(); });
+}
+function deleteTier(id){
+  var tiers = STATE.settings.affiliateTiers||[];
+  var t = tiers.find(function(x){return x.id===id;});
+  if(!t) return;
+  if(tiers.length<=1) return alert("Can't delete the last tier — affiliates need at least one commission rate to match.");
+  if(t.minReferrals===0 && !tiers.some(function(x){return x.id!==id && x.minReferrals===0;})){
+    if(!confirm('This is the only tier starting at 0 referrals — deleting it means brand-new affiliates won\'t match any tier until they hit the next threshold, and commission crediting will fall back to a 15% default. Delete anyway?')) return;
+  }
+  STATE.settings.affiliateTiers = tiers.filter(function(x){return x.id!==id;});
+  log('delete_tier', t.name);
+  save();
+}
 
 // ---------- PAYOUTS ----------
 function renderPayouts(){
@@ -231,29 +474,63 @@ function renderPayouts(){
   }).join('');
   return '<h2>Payout Requests</h2><div class="card"><table><tr><th>User</th><th>Type</th><th>Amount</th><th>Bank</th><th>Status</th><th></th></tr>'+rows+'</table></div>';
 }
+// Flags a possible self-referral: does this user share a NIN or bank account with
+// someone they're connected to via the referral program (as referrer or referred),
+// or did they receive a funded account via transfer from someone connected that way?
+// The transfer path matters because someone can refer their own second account, fund
+// it there, then transfer the funded account back to themselves — collecting the
+// referral discount, the commission, AND the profit share without ever passing a
+// challenge on their real account. Doesn't block anything by itself — admin still
+// decides — it's a warning at the moment of payout approval, which is the point real
+// money moves, and it now fires for trader (profit-share) payouts too, not just
+// affiliate ones, since that's the payout type this abuse path actually cashes out through.
+function sameIdentity_(a, b){
+  if(!a || !b) return false;
+  if(a.kycIdNumber && b.kycIdNumber && a.kycIdNumber===b.kycIdNumber) return true;
+  var aBank = (STATE.payoutRequests.find(function(x){return x.userId===a.id && x.bankDetails;})||{}).bankDetails;
+  var bBank = (STATE.payoutRequests.find(function(x){return x.userId===b.id && x.bankDetails;})||{}).bankDetails;
+  return !!(aBank && bBank && aBank.trim().toLowerCase()===bBank.trim().toLowerCase());
+}
+function selfReferralFlag_(userId){
+  var u = STATE.users.find(function(x){return x.id===userId;});
+  if(!u) return null;
+  var reasons = [];
+  var referred = STATE.users.filter(function(x){return x.referredBy===u.id;});
+  referred.forEach(function(r){
+    if(sameIdentity_(u,r)) reasons.push(r.email+' (referred user) shares the same NIN or bank details');
+  });
+  if(u.referredBy){
+    var referrer = STATE.users.find(function(x){return x.id===u.referredBy;});
+    if(referrer && sameIdentity_(u,referrer)) reasons.push(referrer.email+' (the user who referred them) shares the same NIN or bank details');
+  }
+  // Self-referral + account-transfer combo: flag if this user now owns a funded account
+  // that was transferred to them by someone linked via the referral program in either
+  // direction, or who otherwise looks like the same person.
+  (STATE.accountTransfers||[]).filter(function(t){return t.toUserId===userId && t.status==='accepted';}).forEach(function(t){
+    var sender = STATE.users.find(function(x){return x.id===t.fromUserId;});
+    if(!sender) return;
+    var linkedByReferral = sender.referredBy===u.id || u.referredBy===sender.id;
+    var identityMatch = sameIdentity_(u,sender);
+    if(linkedByReferral || identityMatch){
+      reasons.push(sender.email+' transferred them a '+t.accountCategory+' account and is linked via the referral program'+(identityMatch?' and shares the same NIN or bank details':''));
+    }
+  });
+  return reasons.length ? reasons.join('; ') : null;
+}
 function approvePayout(id){
   var p = STATE.payoutRequests.find(function(x){return x.id===id;});
+  var flag = selfReferralFlag_(p.userId);
+  if(flag && !confirm('Possible self-referral: '+flag+'.\n\nApprove this '+p.type+' payout anyway?')) return;
   p.status='paid';
-  if(p.type==='trader'){
-    var u = STATE.users.find(function(x){return x.id===p.userId;});
-    var acc = STATE.traderAccounts.find(function(a){return a.userId===p.userId && a.stage==='funded';});
-    if(acc && acc.userId){
-      var referrer = STATE.users.find(function(x){return x.id===STATE.users.find(function(y){return y.id===p.userId;}).referredBy;});
-      if(referrer){ referrer.affiliateEarnings += Math.round(p.amount*STATE.settings.affiliateCommissionRate/100); }
-    }
-  }
   STATE.notifications.push({id:uid('nt'),userId:p.userId,message:'Your payout of '+naira(p.amount)+' was approved.',read:false,createdAt:new Date().toISOString()});
+  sendMail(userEmail_(p.userId), 'Your payout of '+naira(p.amount)+' was approved', 'Your payout request of '+naira(p.amount)+' has been approved and is being processed.');
   log('approve_payout', p.id);
   save();
 }
 function denyPayout(id){
   var p=STATE.payoutRequests.find(function(x){return x.id===id;});
   p.status='rejected';
-  if(p.type==='affiliate'){
-    var u = STATE.users.find(function(x){return x.id===p.userId;});
-    if(u) u.affiliateEarnings += p.amount; // release the reservation made at request time
-  }
-  log('deny_payout', p.id);
+  sendMail(userEmail_(p.userId), 'Your payout request was denied', 'Your payout request of '+naira(p.amount)+' was reviewed and denied. Please open a support ticket if you have questions.');
   save();
 }
 
@@ -262,10 +539,61 @@ function renderAffiliate(){
   var rows = STATE.traderAccounts.filter(function(a){return a.status!=='closed';}).map(function(a){
     var u = STATE.users.find(function(x){return x.id===a.userId;})||{};
     return '<tr><td>'+(u.email||'-')+'</td><td>'+a.login+'</td><td>'+a.category+'</td><td>'+a.stage+'</td>'+
-      '<td><button class="btn small warn" onclick="markClosed(\''+a.id+'\',\'failed\')">Failed</button> <button class="btn small danger" onclick="markClosed(\''+a.id+'\',\'breached\')">Breached</button> '+
+      '<td>Initial '+naira(a.startBalance)+' · Current '+naira(a.currentBalance)+'</td>'+
+      '<td><button class="btn small" onclick="updateBalance(\''+a.id+'\')">Update Balance</button> '+
+      '<button class="btn small warn" onclick="markClosed(\''+a.id+'\',\'failed\')">Failed</button> <button class="btn small danger" onclick="markClosed(\''+a.id+'\',\'breached\')">Breached</button> '+
       '<button class="btn small" onclick="advanceStage(\''+a.id+'\')">Advance Stage</button></td></tr>';
   }).join('');
-  return '<h2>Trader Accounts</h2><div class="card"><table><tr><th>User</th><th>Login</th><th>Category</th><th>Stage</th><th>Actions</th></tr>'+rows+'</table></div>';
+  return '<h2>Trader Accounts</h2><div class="card"><table><tr><th>User</th><th>Login</th><th>Category</th><th>Stage</th><th>Balance</th><th>Actions</th></tr>'+rows+'</table></div>';
+}
+// Book Stage (B-Book / H-Book / In-House Trader) is a property of the USER
+// overall — not any single trader account — since it reflects how much this
+// trader as a whole has been proven, across all their accounts. Set manually
+// by admin; there's no trade log to compute it automatically.
+function setUserBookStage(userId, bookStage){
+  var u = STATE.users.find(function(x){return x.id===userId;});
+  var bs = STATE.bookStages.find(function(b){return b.id===bookStage;});
+  u.bookStage = bookStage;
+  STATE.notifications.push({id:uid('nt'),userId:u.id,message:'Your account moved to '+(bs?bs.name:bookStage)+'!',read:false,createdAt:new Date().toISOString()});
+  sendMail(u.email, 'Your account status has been updated', 'Your account has been moved to '+(bs?bs.name:bookStage)+'.');
+  log('set_user_book_stage', u.email+' -> '+bookStage);
+  save();
+}
+function renderUsers(){
+  var q = (window._userSearch||'').toLowerCase();
+  var users = STATE.users.filter(function(u){
+    return !q || (u.email||'').toLowerCase().indexOf(q)!==-1 || (u.name||'').toLowerCase().indexOf(q)!==-1;
+  });
+  var rows = users.map(function(u){
+    var bs = u.bookStage || 'bbook';
+    var referredCount = STATE.users.filter(function(x){return x.referredBy===u.id;}).length;
+    var accCount = STATE.traderAccounts.filter(function(a){return a.userId===u.id && a.status!=='closed';}).length;
+    var bookSelect = '<select onchange="setUserBookStage(\''+u.id+'\',this.value)">'+STATE.bookStages.map(function(b){return '<option value="'+b.id+'"'+(b.id===bs?' selected':'')+'>'+b.name+'</option>';}).join('')+'</select>';
+    return '<tr><td>'+(u.name||'-')+'</td><td>'+(u.email||'-')+'</td><td>'+accCount+'</td><td>'+referredCount+'</td><td><span class="badge b-'+(u.kycStatus==='approved'?'confirmed':u.kycStatus==='pending'?'pending':'rejected')+'">'+u.kycStatus+'</span></td><td>'+bookSelect+'</td></tr>';
+  }).join('');
+  return '<h2>Users</h2>'+
+    '<div class="card"><input placeholder="Search name or email" value="'+(window._userSearch||'')+'" oninput="window._userSearch=this.value;render()" style="max-width:260px"></div>'+
+    '<div class="card"><table><tr><th>Name</th><th>Email</th><th>Accounts</th><th>Referrals</th><th>KYC</th><th>Book Stage</th></tr>'+rows+'</table></div>';
+}
+// ---------- ACCOUNT TRANSFERS (read-only — users initiate/accept these themselves) ----------
+function renderTransfers(){
+  var list = (STATE.accountTransfers||[]).slice().reverse();
+  var rows = list.map(function(t){
+    var from = STATE.users.find(function(u){return u.id===t.fromUserId;});
+    var to = STATE.users.find(function(u){return u.id===t.toUserId;});
+    var acc = STATE.traderAccounts.find(function(a){return a.id===t.accountId;});
+    var statusClass = t.status==='accepted'?'b-active':t.status==='pending'?'b-pending':'b-closed';
+    return '<tr><td>'+(t.accountCategory||'-')+(acc?' ('+acc.login+')':' (deleted)')+'</td>'+
+      '<td>'+(from?(from.name+'<br><span class="muted">'+from.email+'</span>'):'-')+'</td>'+
+      '<td>'+(to?(to.name+'<br><span class="muted">'+to.email+'</span>'):'-')+'</td>'+
+      '<td><span class="badge '+statusClass+'">'+t.status+'</span></td>'+
+      '<td>'+new Date(t.createdAt).toLocaleString()+'</td>'+
+      '<td>'+(t.respondedAt? new Date(t.respondedAt).toLocaleString() : '-')+'</td></tr>';
+  }).join('');
+  return '<h2>Account Transfers</h2>'+
+    '<div class="card muted">Users transfer trading accounts to each other directly — instant on acceptance, no fee, no approval needed. This is a read-only log for fraud monitoring and dispute resolution.</div>'+
+    '<div class="card"><table><tr><th>Account</th><th>From</th><th>To</th><th>Status</th><th>Requested</th><th>Responded</th></tr>'+
+    (rows||'<tr><td colspan="6" class="muted" style="text-align:center">No transfers yet</td></tr>')+'</table></div>';
 }
 function advanceStage(id){
   var a = STATE.traderAccounts.find(function(x){return x.id===id;});
@@ -274,14 +602,20 @@ function advanceStage(id){
   if(next==='phase2') STATE.certificates.push({id:uid('ct'),userId:a.userId,traderAccountId:a.id,type:'phase1',issuedAt:new Date().toISOString()});
   if(next==='funded') STATE.certificates.push({id:uid('ct'),userId:a.userId,traderAccountId:a.id,type:'funded',issuedAt:new Date().toISOString()});
   STATE.notifications.push({id:uid('nt'),userId:a.userId,message:'Your account advanced to '+next+'!',read:false,createdAt:new Date().toISOString()});
+  sendMail(userEmail_(a.userId), 'Your challenge account advanced', 'Congratulations — your account (login '+a.login+') has advanced to '+next+'!');
   save();
 }
+// Captures both the initial balance (what profit-share payouts are measured
+// against) and the current balance/equity. Editing "Initial" here is meant
+// for correcting records, not for routine updates — routine balance syncs
+// should only touch current balance/equity.
 function updateBalance(id){
   var a = STATE.traderAccounts.find(function(x){return x.id===id;});
-  var bal = Number(prompt('New balance for '+a.login, a.currentBalance));
-  var eq = Number(prompt('New equity for '+a.login, a.equity));
-  if(isNaN(bal)||isNaN(eq)) return;
-  a.currentBalance=bal; a.equity=eq;
+  var initBal = Number(prompt('Initial balance for '+a.login+' (only change this to correct a mistake)', a.startBalance));
+  var bal = Number(prompt('Current balance for '+a.login, a.currentBalance));
+  var eq = Number(prompt('Current equity for '+a.login, a.equity));
+  if(isNaN(initBal)||isNaN(bal)||isNaN(eq)) return;
+  a.startBalance=initBal; a.currentBalance=bal; a.equity=eq;
   a.balanceHistory.push({date:new Date().toISOString(),balance:bal,equity:eq});
   save();
 }
@@ -299,51 +633,79 @@ function delTest(i){ STATE.testimonials.splice(i,1); save(); }
 function addFaq(){ STATE.faqs.push({question:document.getElementById('f_q').value,answer:document.getElementById('f_a').value}); save(); }
 function delFaq(i){ STATE.faqs.splice(i,1); save(); }
 
-// ---------- CHAT ----------
-function chatBadge_(){
-  var n = STATE.chatMessages.filter(function(m){return m.sender==='user' && !m.read;}).length;
+// ---------- SUPPORT TICKETS (Resolution Center) ----------
+function ticketBadge_(){
+  var n = STATE.supportTickets.reduce(function(s,t){ return s + (t.messages||[]).filter(function(m){return m.sender==='user' && !m.read;}).length; },0);
   return n ? ' ('+n+')' : '';
 }
-var activeChatUser = null;
-function renderChatTab(){
-  var userIds = Array.from(new Set(STATE.chatMessages.map(function(m){return m.userId;})));
-  var list = userIds.map(function(uid_){
-    var u = STATE.users.find(function(x){return x.id===uid_;})||{};
-    var unread = STATE.chatMessages.filter(function(m){return m.userId===uid_ && m.sender==='user' && !m.read;}).length;
-    return '<div class="kv" style="cursor:pointer" onclick="openChatUser(\''+uid_+'\')"><b>'+(u.email||uid_)+'</b>'+(unread?' <span class="badge b-pending">'+unread+'</span>':'')+'</div>';
-  }).join('') || '<div class="muted">No conversations yet.</div>';
-  var thread = '';
-  if(activeChatUser){
-    var msgs = STATE.chatMessages.filter(function(m){return m.userId===activeChatUser;});
-    thread = '<div class="card"><div style="max-height:260px;overflow:auto">'+msgs.map(function(m){return '<div class="kv" style="text-align:'+(m.sender==='admin'?'right':'left')+'"><b>'+m.sender+':</b> '+m.text+'</div>';}).join('')+'</div>'+
-      '<input id="chat_reply" placeholder="Reply..."><button class="btn small" onclick="sendAdminReply()">Send</button></div>';
-  }
-  return '<h2>Support Chat</h2><div class="card">'+list+'</div>'+thread;
+var activeTicket = null, ticketFilter = 'open';
+function renderTicketsTab(){
+  if(activeTicket) return renderTicketThreadAdmin_(activeTicket);
+  var filtered = STATE.supportTickets.filter(function(t){ return ticketFilter==='all' || t.status===ticketFilter; }).slice().reverse();
+  var rows = filtered.map(function(t){
+    var u = STATE.users.find(function(x){return x.id===t.userId;})||{};
+    var unread = (t.messages||[]).filter(function(m){return m.sender==='user' && !m.read;}).length;
+    var last = (t.messages||[])[t.messages.length-1];
+    return '<tr><td>'+(u.email||t.userId)+'</td><td>'+t.subject+(unread?' <span class="badge b-pending">'+unread+' new</span>':'')+'</td>'+
+      '<td>'+(last? last.text.slice(0,50):'')+'</td><td><span class="badge '+(t.status==='open'?'b-pending':'b-confirmed')+'">'+t.status+'</span></td>'+
+      '<td><button class="btn small" onclick="openTicketAdmin(\''+t.id+'\')">Open</button></td></tr>';
+  }).join('');
+  return '<h2>Resolution Center</h2>'+
+    '<div class="row" style="margin-bottom:10px">'+['open','resolved','all'].map(function(f){return '<span class="badge '+(ticketFilter===f?'b-confirmed':'b-pending')+'" style="cursor:pointer" onclick="ticketFilter=\''+f+'\';render()">'+f+'</span>';}).join(' ')+'</div>'+
+    '<div class="card"><table><tr><th>User</th><th>Subject</th><th>Last Message</th><th>Status</th><th></th></tr>'+(rows||'<tr><td colspan="5" class="muted">No tickets</td></tr>')+'</table></div>';
 }
-function openChatUser(uid_){
-  activeChatUser = uid_;
-  STATE.chatMessages.forEach(function(m){ if(m.userId===uid_ && m.sender==='user') m.read=true; });
+function openTicketAdmin(id){
+  activeTicket = id;
+  var t = STATE.supportTickets.find(function(x){return x.id===id;});
+  (t.messages||[]).forEach(function(m){ if(m.sender==='user') m.read=true; });
   save();
 }
-function sendAdminReply(){
-  var text = document.getElementById('chat_reply').value.trim();
+function renderTicketThreadAdmin_(id){
+  var t = STATE.supportTickets.find(function(x){return x.id===id;});
+  if(!t){ activeTicket=null; return renderTicketsTab(); }
+  var u = STATE.users.find(function(x){return x.id===t.userId;})||{};
+  var thread = t.messages.map(function(m){return '<div class="kv" style="text-align:'+(m.sender==='admin'?'right':'left')+'"><b>'+m.sender+':</b> '+m.text+'</div>';}).join('');
+  return '<button class="btn small" onclick="activeTicket=null;render()">← Back</button>'+
+    '<h2>'+t.subject+'</h2><div class="muted" style="margin-bottom:10px">'+(u.email||t.userId)+' · <span class="badge '+(t.status==='open'?'b-pending':'b-confirmed')+'">'+t.status+'</span></div>'+
+    '<div class="card"><div style="max-height:300px;overflow:auto">'+thread+'</div>'+
+    (t.status==='open' ? '<input id="tk_admin_reply" placeholder="Reply..."><button class="btn small" onclick="sendTicketReply(\''+t.id+'\')">Send</button> <button class="btn small warn" onclick="resolveTicket(\''+t.id+'\')">Mark Resolved</button>' :
+      '<button class="btn small" onclick="reopenTicket(\''+t.id+'\')">Reopen Ticket</button>')+'</div>';
+}
+function sendTicketReply(id){
+  var t = STATE.supportTickets.find(function(x){return x.id===id;});
+  var text = document.getElementById('tk_admin_reply').value.trim();
   if(!text) return;
-  STATE.chatMessages.push({id:uid('cm'),userId:activeChatUser,sender:'admin',text:text,read:false,createdAt:new Date().toISOString()});
+  t.messages.push({sender:'admin',text:text,read:false,createdAt:new Date().toISOString()});
+  sendMail(userEmail_(t.userId), 'Reply to your support ticket: '+t.subject, text);
   save();
 }
+function resolveTicket(id){ var t=STATE.supportTickets.find(function(x){return x.id===id;}); t.status='resolved'; save(); }
+function reopenTicket(id){ var t=STATE.supportTickets.find(function(x){return x.id===id;}); t.status='open'; save(); }
 
 // ---------- KYC ----------
 function renderKyc(){
   var pending = STATE.users.filter(function(u){return u.kycStatus==='pending';});
+  var byNin = {};
+  STATE.users.forEach(function(u){ if(u.kycIdNumber){ (byNin[u.kycIdNumber]=byNin[u.kycIdNumber]||[]).push(u); } });
   var rows = pending.map(function(u){
-    return '<tr><td>'+u.email+'</td><td>'+u.kycCountry+'</td><td>'+u.kycIdNumber+'</td>'+
+    var dupes = (byNin[u.kycIdNumber]||[]).filter(function(x){return x.id!==u.id;});
+    var flag = dupes.length ? ' <span class="badge b-rejected" title="Same NIN as: '+dupes.map(function(x){return x.email;}).join(', ')+'">⚠ Duplicate NIN</span>' : '';
+    return '<tr><td>'+u.email+flag+'</td><td>'+u.kycCountry+'</td><td>'+u.kycIdNumber+'</td>'+
       '<td><button class="btn small" onclick="setKyc(\''+u.id+'\',\'approved\')">Approve</button> <button class="btn small danger" onclick="setKyc(\''+u.id+'\',\'none\')">Reject</button></td></tr>';
   }).join('');
   var all = STATE.users.map(function(u){return '<div class="kv">'+u.email+' — <span class="badge b-'+(u.kycStatus==='approved'?'active':u.kycStatus==='pending'?'pending':'closed')+'">'+u.kycStatus+'</span></div>';}).join('');
-  return '<h2>KYC — Pending Review</h2><div class="card"><table><tr><th>Email</th><th>Country</th><th>ID Number</th><th></th></tr>'+(rows||'<tr><td colspan="4" class="muted">None pending</td></tr>')+'</table></div>'+
+  return '<h2>KYC — Pending Review</h2>'+
+    '<div class="muted" style="margin-bottom:10px">Users submit their NIN in-app, then upload a selfie + NIN photo via the verification form linked in Settings. Review the form submission, then Approve/Reject here.</div>'+
+    '<div class="card"><table><tr><th>Email</th><th>Country</th><th>ID Number</th><th></th></tr>'+(rows||'<tr><td colspan="4" class="muted">None pending</td></tr>')+'</table></div>'+
     '<h4>All Users</h4><div class="card">'+all+'</div>';
 }
-function setKyc(userId,status){ var u=STATE.users.find(function(x){return x.id===userId;}); u.kycStatus=status; save(); }
+function setKyc(userId,status){
+  var u=STATE.users.find(function(x){return x.id===userId;});
+  u.kycStatus=status;
+  if(status==='approved') sendMail(u.email, 'Your identity has been verified', 'Your identity verification was approved. You can now purchase challenges and request payouts.');
+  else if(status==='rejected') sendMail(u.email, 'Your identity verification needs attention', 'Your identity verification was not approved. Please open a support ticket or resubmit your details.');
+  save();
+}
 
 // ---------- ANALYTICS ----------
 function renderAnalytics(){
@@ -362,6 +724,183 @@ function renderAnalytics(){
 }
 
 // ---------- SETTINGS ----------
+// ---------- AVATARS (profile icons) ----------
+// Shown to users as selectable profile icons at signup, and in their
+// dashboard's "Change Icon" picker. Paste any image URL, or a data:image/...
+// URI if you don't have anywhere to host the file.
+function renderAvatars(){
+  var lib = STATE.settings.avatarLibrary || [];
+  var grid = lib.map(function(a){
+    return '<div class="card" style="text-align:center"><img src="'+a.url+'" style="width:64px;height:64px;border-radius:50%;object-fit:cover"><div class="muted" style="margin-top:6px;word-break:break-all">'+a.id+'</div><button class="btn small danger" style="margin-top:6px" onclick="removeAvatar(\''+a.id+'\')">Remove</button></div>';
+  }).join('');
+  return '<h2>Profile Icons</h2>'+
+    '<div class="muted" style="margin-bottom:10px">These show up as choices when a new user signs up, and under "Change Icon" on their dashboard.</div>'+
+    '<div class="grid">'+(grid || '<div class="muted">No icons yet — add one below.</div>')+'</div>'+
+    '<div class="card"><label>New Icon — Image URL or data:image/... URI</label><input id="av_url" placeholder="https://example.com/icon.png">'+
+    '<button class="btn" onclick="addAvatar()">Add Icon</button></div>';
+}
+function addAvatar(){
+  var url = document.getElementById('av_url').value.trim();
+  if(!url) return alert('Paste an image URL first');
+  if(!STATE.settings.avatarLibrary) STATE.settings.avatarLibrary = [];
+  STATE.settings.avatarLibrary.push({id:uid('av'), url:url});
+  save();
+}
+function removeAvatar(id){
+  STATE.settings.avatarLibrary = STATE.settings.avatarLibrary.filter(function(a){return a.id!==id;});
+  save();
+}
+
+// ---------- ACCOUNT ALERTS (popup announcements shown to logged-in users) ----------
+var alertEditId = null;
+var ALERT_SCREENS = [
+  {v:'login', label:'Right After Login'},
+  {v:'index', label:'Home'},
+  {v:'dashboard', label:'Dashboard'},
+  {v:'checkout', label:'Checkout'},
+  {v:'payout', label:'Payout'},
+  {v:'affiliate', label:'Affiliate'},
+  {v:'support', label:'Support'},
+  {v:'any', label:'Any Screen'}
+];
+function alertScreenLabel_(v){ var m=ALERT_SCREENS.find(function(s){return s.v===v;}); return m?m.label:v; }
+function renderAlerts(){
+  var items = STATE.settings.customAlerts || [];
+  var editing = alertEditId ? items.find(function(a){return a.id===alertEditId;}) : null;
+  var rows = items.map(function(a){
+    return '<div class="card"><div class="row" style="align-items:flex-start">'+
+      (a.imageUrl?'<img src="'+a.imageUrl+'" style="width:70px;height:70px;object-fit:cover;border-radius:10px;flex-shrink:0">':'')+
+      '<div style="flex:1"><div class="row"><b>'+(a.title||'(untitled)')+'</b>'+
+      '<span class="badge '+(a.active?'b-active':'b-closed')+'">'+(a.active?'ACTIVE':'PAUSED')+'</span></div>'+
+      '<div class="muted" style="font-size:12px;margin-top:2px">Shows: '+alertScreenLabel_(a.targetScreen)+' · Max '+(a.maxShows||'∞')+'x per user · '+(a.cooldownHours||0)+'h between shows</div>'+
+      (a.linkUrl?'<div class="muted" style="font-size:12px;word-break:break-all">Links to: '+a.linkUrl+'</div>':'<div class="muted" style="font-size:12px">No link — image only</div>')+
+      '<div class="row" style="margin-top:8px;gap:6px">'+
+      '<button class="btn small ghost" onclick="editAlert(\''+a.id+'\')">Edit</button>'+
+      '<button class="btn small warn" onclick="toggleAlertActive(\''+a.id+'\')">'+(a.active?'Pause':'Activate')+'</button>'+
+      '<button class="btn small danger" onclick="deleteAlert(\''+a.id+'\')">Delete</button>'+
+      '</div></div></div></div>';
+  }).join('');
+  return '<h2>Account Alerts</h2>'+
+    '<div class="card muted" style="margin-bottom:10px">Popup announcements shown to logged-in users — pick an image, an optional link, which screen triggers it, and how often it repeats per user. Create as many as you like; multiple eligible alerts queue up and show one at a time.</div>'+
+    (rows || '<div class="card muted" style="text-align:center">No alerts yet — create one below.</div>')+
+    '<div class="card">'+
+    '<b>'+(editing?'Edit Alert':'New Alert')+'</b>'+
+    '<label>Title (internal label, optional — also shown above the image)</label><input id="al_title" value="'+(editing?(editing.title||''):'')+'" placeholder="e.g. Ramadan Promo">'+
+    '<label>Image URL (required)</label><input id="al_image" value="'+(editing?(editing.imageUrl||''):'')+'" placeholder="https://example.com/promo.jpg">'+
+    '<label>Link URL (optional — opens in a new tab if the image is clicked)</label><input id="al_link" value="'+(editing?(editing.linkUrl||''):'')+'" placeholder="https://...">'+
+    '<label>Show On</label><select id="al_screen">'+ALERT_SCREENS.map(function(s){return '<option value="'+s.v+'" '+(editing&&editing.targetScreen===s.v?'selected':'')+'>'+s.label+'</option>';}).join('')+'</select>'+
+    '<label>Max Times Shown Per User (blank = unlimited)</label><input id="al_max" type="number" min="0" value="'+(editing&&editing.maxShows?editing.maxShows:'')+'" placeholder="e.g. 3">'+
+    '<label>Hours Between Repeat Shows (blank = no cooldown, only limited by max above)</label><input id="al_cooldown" type="number" min="0" value="'+(editing&&editing.cooldownHours?editing.cooldownHours:'')+'" placeholder="e.g. 24">'+
+    '<label><input type="checkbox" id="al_active" '+(!editing||editing.active!==false?'checked':'')+' style="width:auto;margin-right:6px"> Active</label>'+
+    '<div class="row" style="gap:8px">'+
+    '<button class="btn" onclick="saveAlert()">'+(editing?'Save Changes':'Create Alert')+'</button>'+
+    (editing?'<button class="btn ghost" onclick="cancelAlertEdit()">Cancel</button>':'')+
+    '</div></div>';
+}
+function editAlert(id){ alertEditId = id; render(); }
+function cancelAlertEdit(){ alertEditId = null; render(); }
+function saveAlert(){
+  var imageUrl = document.getElementById('al_image').value.trim();
+  if(!imageUrl) return alert('Paste an image URL first');
+  var data = {
+    title: document.getElementById('al_title').value.trim(),
+    imageUrl: imageUrl,
+    linkUrl: document.getElementById('al_link').value.trim(),
+    targetScreen: document.getElementById('al_screen').value,
+    maxShows: parseInt(document.getElementById('al_max').value, 10) || 0,
+    cooldownHours: parseInt(document.getElementById('al_cooldown').value, 10) || 0,
+    active: document.getElementById('al_active').checked
+  };
+  if(!STATE.settings.customAlerts) STATE.settings.customAlerts = [];
+  if(alertEditId){
+    var existing = STATE.settings.customAlerts.find(function(a){return a.id===alertEditId;});
+    if(existing) Object.assign(existing, data);
+    log('edit_alert', data.title||imageUrl);
+  } else {
+    STATE.settings.customAlerts.push(Object.assign({id:uid('al'), createdAt:new Date().toISOString()}, data));
+    log('add_alert', data.title||imageUrl);
+  }
+  alertEditId = null;
+  save(function(){ render(); });
+}
+function toggleAlertActive(id){
+  var a = (STATE.settings.customAlerts||[]).find(function(x){return x.id===id;});
+  if(!a) return;
+  a.active = !a.active;
+  save(function(){ render(); });
+}
+function deleteAlert(id){
+  if(!confirm('Delete this alert? This cannot be undone.')) return;
+  STATE.settings.customAlerts = (STATE.settings.customAlerts||[]).filter(function(a){return a.id!==id;});
+  save(function(){ render(); });
+}
+
+// ---------- PROMOTIONS (affiliate toolkit graphics) ----------
+// Admin pastes an image link (and optional caption) — no file upload needed.
+// These show up in the trader-facing Affiliate > Toolkit tab for sharing.
+function renderPromotions(){
+  var items = STATE.settings.affiliateToolkit || [];
+  var grid = items.map(function(t){
+    return '<div class="card"><img src="'+t.url+'" style="width:100%;border-radius:8px;display:block;margin-bottom:8px">'+
+      '<div class="muted">'+(t.caption||'No caption')+'</div>'+
+      '<button class="btn small danger" style="margin-top:6px" onclick="removeToolkitItem(\''+t.id+'\')">Remove</button></div>';
+  }).join('');
+  return '<h2>Promotions — Affiliate Toolkit</h2>'+
+    '<div class="muted" style="margin-bottom:10px">Paste a link to a promo graphic (hosted anywhere — Drive, Imgur, your CDN). It appears in every affiliate\'s Toolkit tab for download & sharing.</div>'+
+    '<div class="grid">'+(grid || '<div class="muted">No graphics yet — add one below.</div>')+'</div>'+
+    '<div class="card"><label>Image URL</label><input id="promo_url" placeholder="https://example.com/promo.png">'+
+    '<label>Caption (optional)</label><input id="promo_caption" placeholder="e.g. Instagram story template">'+
+    '<button class="btn" onclick="addToolkitItem()">Add Graphic</button></div>';
+}
+function addToolkitItem(){
+  var url = document.getElementById('promo_url').value.trim();
+  if(!url) return alert('Paste an image URL first');
+  var caption = document.getElementById('promo_caption').value.trim();
+  if(!STATE.settings.affiliateToolkit) STATE.settings.affiliateToolkit = [];
+  STATE.settings.affiliateToolkit.push({id:uid('pr'), url:url, caption:caption});
+  log('add_promo', caption||url);
+  save();
+}
+function removeToolkitItem(id){
+  STATE.settings.affiliateToolkit = STATE.settings.affiliateToolkit.filter(function(t){return t.id!==id;});
+  save();
+}
+
+// ---------- DATABASE (clear / raw edit) ----------
+function renderDatabase(){
+  var counts = ['users','orders','traderAccounts','payoutRequests','plans','mt5Pool','discountCodes','supportTickets','notifications','activityLog']
+    .map(function(k){return '<div class="kv">'+k+': <b>'+((STATE[k]||[]).length)+'</b></div>';}).join('');
+  return '<h2>Database</h2>'+
+    '<div class="card"><b>Record Counts</b>'+counts+'</div>'+
+    '<div class="card"><b>Danger Zone</b>'+
+    '<div class="muted" style="margin:6px 0">Wipes every user, order, account, and setting back to a clean install. This cannot be undone.</div>'+
+    '<button class="btn danger" onclick="clearDatabase()">Clear Entire Database</button></div>'+
+    '<div class="card"><b>Raw JSON Editor</b><div class="muted" style="margin:6px 0">Edit the entire database directly. Only for advanced fixes — a bad edit can corrupt the site\'s data.</div>'+
+    '<textarea class="rawjson" id="raw_json">'+escapeHtml_(JSON.stringify(STATE, null, 2))+'</textarea>'+
+    '<button class="btn" onclick="saveRawJson()">Save Raw JSON</button> <button class="btn warn" onclick="render()">Discard Changes</button></div>';
+}
+function escapeHtml_(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function saveRawJson(){
+  var text = document.getElementById('raw_json').value;
+  try{
+    var parsed = JSON.parse(text);
+    if(!confirm('Overwrite the entire database with this JSON? This replaces everything.')) return;
+    STATE = parsed;
+    save();
+  }catch(e){ alert('Invalid JSON: '+e.message); }
+}
+function clearDatabase(){
+  if(!confirm('This will permanently delete ALL users, orders, accounts, and settings. Continue?')) return;
+  if(!confirm('Are you absolutely sure? This cannot be undone.')) return;
+  fetch(WEBAPP_URL + '?action=default')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+      save(function(){ alert('Database cleared.'); });
+    })
+    .catch(function(err){ alert('Could not fetch default state: '+err); });
+}
+
 function renderSettings(){
   var s = STATE.settings;
   return '<h2>Settings</h2><div class="card"><label>Bank Name</label><input id="s_bname" value="'+s.bank.name+'">'+
@@ -370,21 +909,62 @@ function renderSettings(){
     '<label>Stat: Funded Traders Count</label><input id="s_traders" type="number" value="'+s.stats.tradersCount+'">'+
     '<label>Stat: Total Payouts (₦)</label><input id="s_payouts" type="number" value="'+s.stats.totalPayouts+'">'+
     '<label>Affiliate Discount % (for referred buyers)</label><input id="s_affdisc" type="number" value="'+s.affiliateDiscountRate+'">'+
-    '<label>Affiliate Commission % (on payout)</label><input id="s_affcomm" type="number" value="'+s.affiliateCommissionRate+'">'+
+    '<label>Referral Discount Applies To</label><select id="s_refscope"><option value="every" '+(s.referralDiscountScope!=='first'?'selected':'')+'>Every Order</option><option value="first" '+(s.referralDiscountScope==='first'?'selected':'')+'>First Order Only</option></select>'+
+    '<div class="kv">Affiliate commission is set per-tier now — manage rates in the <span style="text-decoration:underline;cursor:pointer" onclick="setTab(\'tiers\')">Tiers</span> tab.</div>'+
+    '<label>Trader Profit Split % (share paid out to the trader)</label><input id="s_profitsplit" type="number" value="'+(s.profitSplitPct||80)+'">'+
     '<label>Min Payout (₦)</label><input id="s_minpay" type="number" value="'+s.minPayout+'">'+
     '<label>Min Affiliate Payout (₦)</label><input id="s_minaffpay" type="number" value="'+s.minAffiliatePayout+'">'+
+    '<label>KYC Verification Form URL (Google Form for selfie + NIN photo upload)</label><input id="s_kycform" value="'+(s.kycFormUrl||'')+'" placeholder="https://forms.gle/...">'+
     '<label>Low Stock Threshold</label><input id="s_lowstock" type="number" value="'+s.lowStockThreshold+'">'+
     '<label>Admin Access Code</label><input id="s_code" value="'+s.accessCode+'">'+
+    '<label>Admin Notification Email</label><input id="s_adminemail" value="'+(s.adminEmail||'')+'" placeholder="you@example.com">'+
+    '<label><input type="checkbox" id="s_emailon" '+(s.emailNotificationsEnabled!==false?'checked':'')+' style="width:auto;margin-right:6px"> Send email notifications</label>'+
     '<button class="btn" onclick="saveSettings()">Save Settings</button></div>';
+}
+function renderSeo(){
+  var seo = STATE.settings.seo || {};
+  return '<h2>SEO</h2>'+
+    '<div class="card muted">Controls what shows up in search results and link previews (Google, WhatsApp, Twitter/X, etc). '+
+    'Note: since this is a static single-page app, these are applied by JavaScript after the page loads, so they help with '+
+    'browser tab titles, social share previews, and crawlers that render JS (Google does) — but won\'t appear in "view source". '+
+    'For guaranteed instant indexing, also hardcode the same title/description directly in App.html\'s &lt;head&gt;. '+
+    'The favicon especially needs this: Google\'s icon-fetching crawler usually skips JavaScript, so paste the favicon URL into the &lt;head&gt; directly too, not just here. '+
+    'App.html\'s &lt;head&gt; already links the full icon set (favicon.ico, 16x16, 32x32, apple-touch-icon, and 192/512 Android icons) — upload those files to the site root and this single URL field below will keep them all in sync at runtime.</div>'+
+    '<div class="card">'+
+    '<label>Page Title (shows in browser tab + Google search result headline)</label><input id="seo_title" value="'+(seo.title||'')+'">'+
+    '<label>Meta Description (the snippet under the headline in search results)</label><textarea id="seo_desc" rows="3">'+(seo.description||'')+'</textarea>'+
+    '<label>Keywords (comma-separated, low SEO impact today but harmless)</label><input id="seo_keywords" value="'+(seo.keywords||'')+'">'+
+    '<label>Site Name (used in social preview cards)</label><input id="seo_sitename" value="'+(seo.siteName||'')+'">'+
+    '<label>Social Preview Image URL (shown when the link is shared — 1200x630 recommended)</label><input id="seo_ogimage" value="'+(seo.ogImage||'')+'" placeholder="https://...">'+
+    '<label>Favicon / Site Icon URL (square image, 512x512 recommended — this is the little logo Google shows next to your site name in search results)</label><input id="seo_favicon" value="'+(seo.favicon||'')+'" placeholder="https://.../favicon.png">'+
+    '<label>Canonical URL (the real public URL of this site, e.g. https://yourdomain.com)</label><input id="seo_canonical" value="'+(seo.canonicalUrl||'')+'" placeholder="https://yourdomain.com">'+
+    '<button class="btn" onclick="saveSeo()">Save SEO Settings</button></div>'+
+    (seo.ogImage ? '<div class="card"><label>Social Image Preview</label><img src="'+seo.ogImage+'" style="max-width:100%;border-radius:10px;display:block"></div>' : '')+
+    (seo.favicon ? '<div class="card"><label>Favicon Preview</label><img src="'+seo.favicon+'" style="width:48px;height:48px;border-radius:8px;display:block"></div>' : '');
+}
+function saveSeo(){
+  STATE.settings.seo = {
+    title: document.getElementById('seo_title').value.trim(),
+    description: document.getElementById('seo_desc').value.trim(),
+    keywords: document.getElementById('seo_keywords').value.trim(),
+    siteName: document.getElementById('seo_sitename').value.trim(),
+    ogImage: document.getElementById('seo_ogimage').value.trim(),
+    favicon: document.getElementById('seo_favicon').value.trim(),
+    canonicalUrl: document.getElementById('seo_canonical').value.trim()
+  };
+  save();
 }
 function saveSettings(){
   var s = STATE.settings;
   s.bank.name=document.getElementById('s_bname').value; s.bank.accountNumber=document.getElementById('s_bnum').value;
   s.bank.accountName=document.getElementById('s_baccname').value; s.bank.instructions=document.getElementById('s_binstr').value;
   s.stats.tradersCount=Number(document.getElementById('s_traders').value); s.stats.totalPayouts=Number(document.getElementById('s_payouts').value);
-  s.affiliateDiscountRate=Number(document.getElementById('s_affdisc').value); s.affiliateCommissionRate=Number(document.getElementById('s_affcomm').value);
+  s.affiliateDiscountRate=Number(document.getElementById('s_affdisc').value); s.referralDiscountScope=document.getElementById('s_refscope').value;
+  s.profitSplitPct=Number(document.getElementById('s_profitsplit').value);
   s.minPayout=Number(document.getElementById('s_minpay').value); s.minAffiliatePayout=Number(document.getElementById('s_minaffpay').value);
+  s.kycFormUrl=document.getElementById('s_kycform').value.trim();
   s.lowStockThreshold=Number(document.getElementById('s_lowstock').value); s.accessCode=document.getElementById('s_code').value;
+  s.adminEmail=document.getElementById('s_adminemail').value.trim(); s.emailNotificationsEnabled=document.getElementById('s_emailon').checked;
   save();
 }
 
