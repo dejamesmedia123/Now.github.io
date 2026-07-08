@@ -81,6 +81,16 @@ function sendMail(to, subject, body){
 function userEmail_(userId){ var u = STATE.users.find(function(x){return x.id===userId;}); return u ? u.email : ''; }
 function uid(p){ return p+'_'+Math.random().toString(36).slice(2,9); }
 function naira(n){ return '₦'+Number(n||0).toLocaleString(); }
+
+// ---- BNPL (Buy Now Pay Later) display helpers ----
+// Same fixed 40/60 upfront/balance split used in App.html's checkout —
+// display-only here, admin marks the balance as received off-app for now.
+var BNPL_UPFRONT_PCT = 0.40;
+function isBNPL_(plan){ return !!plan && plan.planTypeId === 'pt_bnpl'; }
+function bnplSplit_(plan){
+  var upfront = Math.round((plan && plan.price||0) * BNPL_UPFRONT_PCT);
+  return { upfront: upfront, balance: ((plan && plan.price)||0) - upfront };
+}
 function log(action,details){ STATE.activityLog.push({id:uid('lg'),actor:'admin',action:action,details:details,createdAt:new Date().toISOString()}); }
 // Tier lookup, mirroring App.html's version — needed here too since commission is
 // actually credited in confirmOrder(), which lives in this file.
@@ -171,7 +181,8 @@ function renderOrders(){
   var rows = filtered.slice().reverse().map(function(o){
     var user = STATE.users.find(function(u){return u.id===o.userId;}) || {};
     var plan = STATE.plans.find(function(p){return p.id===o.planId;}) || {};
-    return '<tr><td>'+o.orderCode+'</td><td>'+(user.email||'-')+'</td><td>'+(plan.name||'-')+'</td><td>'+naira(o.amount)+'</td>'+
+    var bnplNote = isBNPL_(plan) ? '<div class="muted" style="font-size:11px">BNPL upfront — '+naira(bnplSplit_(plan).balance)+' due on funded phase</div>' : '';
+    return '<tr><td>'+o.orderCode+'</td><td>'+(user.email||'-')+'</td><td>'+(plan.name||'-')+(isBNPL_(plan)?' <span class="badge b-active" style="font-size:10px">BNPL</span>':'')+'</td><td>'+naira(o.amount)+bnplNote+'</td>'+
       '<td><span class="badge b-'+o.status+'">'+o.status+'</span></td>'+
       '<td>'+(o.status==='pending'? '<button class="btn small" onclick="confirmOrder(\''+o.id+'\')">Confirm</button> <button class="btn small danger" onclick="rejectOrder(\''+o.id+'\')">Reject</button>':'-')+'</td></tr>';
   }).join('');
@@ -256,7 +267,8 @@ function renderPlans(){
   var rows = STATE.plans.map(function(p){
     var dd=STATE.drawdownTypes.find(function(d){return d.id===p.drawdownTypeId;})||{};
     var pt=STATE.planTypes.find(function(t){return t.id===p.planTypeId;})||{};
-    return '<tr><td>'+p.name+'</td><td>'+(dd.name||'-')+'</td><td>'+(pt.name||'-')+'</td><td>'+p.category+'</td><td>'+naira(p.price)+'</td>'+
+    var bnplNote = isBNPL_(p) ? '<div class="muted" style="font-size:11px">'+naira(bnplSplit_(p).upfront)+' now / '+naira(bnplSplit_(p).balance)+' on funded</div>' : '';
+    return '<tr><td>'+p.name+'</td><td>'+(dd.name||'-')+'</td><td>'+(pt.name||'-')+(isBNPL_(p)?' <span class="badge b-active" style="font-size:10px">BNPL</span>':'')+'</td><td>'+p.category+'</td><td>'+naira(p.price)+bnplNote+'</td>'+
       '<td><button class="btn small" onclick="editPlan(\''+p.id+'\')">Edit</button> <button class="btn small danger" onclick="delPlan(\''+p.id+'\')">Del</button></td></tr>';
   }).join('');
   var ddRows = STATE.drawdownTypes.map(function(d){
@@ -408,7 +420,7 @@ function renderTiers(){
     '<div class="card muted">Commission is credited at the referrer\'s current tier rate, based on how many of their referrals have a confirmed (paid) order at the moment a new referral converts. Keep one tier at 0 referrals so every affiliate always matches a rate.</div>'+
     '<div class="card"><table><tr><th>Name</th><th>Min Converted Referrals</th><th>Commission %</th><th></th></tr>'+
     (rows||'<tr><td colspan="4" class="muted" style="text-align:center">No tiers yet</td></tr>')+'</table></div>'+
-    '<div class="card"><h4>Add / Edit Tier</h4>'+
+    '<div class="card" id="tier_form_card"><h4>Add / Edit Tier</h4>'+
     '<input type="hidden" id="tier_id" value="">'+
     '<label>Name</label><input id="tier_name">'+
     '<label>Min Converted Referrals</label><input id="tier_min" type="number" value="0">'+
@@ -428,6 +440,9 @@ function editTier(id){
   document.getElementById('tier_name').value=t.name;
   document.getElementById('tier_min').value=t.minReferrals;
   document.getElementById('tier_pct').value=t.commissionPct;
+  var card = document.getElementById('tier_form_card');
+  if(card){ card.scrollIntoView({behavior:'smooth', block:'start'}); }
+  document.getElementById('tier_name').focus();
 }
 function saveTier(){
   var id = document.getElementById('tier_id').value;
