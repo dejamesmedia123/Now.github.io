@@ -1088,7 +1088,7 @@ function renderDashboard(){
     '<img id="kyc_selfie_preview" style="display:none;width:72px;height:72px;object-fit:cover;border-radius:10px;margin:6px 0;border:1px solid var(--line)">'+
     '<label>Photo of NIN</label><input id="kyc_nin_file" type="file" accept="image/*" onchange="previewKycImage_(\'kyc_nin_file\',\'kyc_nin_preview\')">'+
     '<img id="kyc_nin_preview" style="display:none;width:72px;height:72px;object-fit:cover;border-radius:10px;margin:6px 0;border:1px solid var(--line)">'+
-    '<div class="muted" style="margin:6px 0">These photos stay on your device for your own reference — they\'re not uploaded here. An admin will contact you separately for photo verification.</div>'+
+    '<div class="muted" style="margin:6px 0">.    .</div>'+
     '<button class="btn small" onclick="lockRun(this,submitKyc)">Submit for Review</button>')+'</div>';
   return header+kycBanner+bookStageCard+statsRow+quickActions+renderTransfersSection_()+'<h4>Your Accounts</h4>'+accHtml+(ordHtml?'<h4>Orders</h4><div class="card">'+ordHtml+'</div>':'')+'<h4>Verification</h4>'+kycHtml;
 }
