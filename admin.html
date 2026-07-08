@@ -58,7 +58,18 @@ var STATE=null, tab='orders', gateOk=false;
 function boot(){
   fetch(WEBAPP_URL + '?action=read')
     .then(function(r){ return r.json(); })
-    .then(function(data){ STATE = (typeof data === 'string') ? JSON.parse(data) : data; render(); })
+    .then(function(data){
+      STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+      // Persistent login: if a previously-entered code is saved and still
+      // matches the current access code, skip the gate. Storing the code
+      // itself (not just a boolean) means changing the access code in
+      // Settings automatically signs out any stale sessions.
+      try{
+        var savedCode = localStorage.getItem('nf_admin_code');
+        if(savedCode && STATE.settings && savedCode === STATE.settings.accessCode) gateOk = true;
+      }catch(e){}
+      render();
+    })
     .catch(function(err){ document.getElementById('app').innerHTML = '<div class="card">Could not reach backend. Check WEBAPP_URL. '+err+'</div>'; });
 }
 // Content-Type: text/plain avoids a CORS preflight (Apps Script can't answer OPTIONS requests).
@@ -115,7 +126,6 @@ function render(){
   STATE.users.forEach(function(u){ if(u.kycStatus===undefined) u.kycStatus='none'; if(u.kycCountry===undefined) u.kycCountry=''; if(u.kycIdNumber===undefined) u.kycIdNumber=''; if(u.bookStage===undefined) u.bookStage='bbook'; });
   if(STATE.settings.referralDiscountScope===undefined) STATE.settings.referralDiscountScope='every';
   if(STATE.settings.profitSplitPct===undefined) STATE.settings.profitSplitPct=80;
-  if(STATE.settings.kycFormUrl===undefined) STATE.settings.kycFormUrl='';
   if(STATE.settings.adminEmail===undefined) STATE.settings.adminEmail='';
   if(STATE.settings.emailNotificationsEnabled===undefined) STATE.settings.emailNotificationsEnabled=true;
   if(!STATE.settings.seo) STATE.settings.seo = {
@@ -144,7 +154,8 @@ function render(){
   ];
   var tabs=['orders','plans','pool','codes','payouts','affiliate','tiers','users','transfers','promotions','alerts','content','avatars','tickets','kyc','analytics','seo','settings','database'];
   if(!STATE.settings.avatarLibrary) STATE.settings.avatarLibrary = [];
-  document.getElementById('nav').innerHTML = tabs.map(function(t){return '<span class="'+(t===tab?'active':'')+'" onclick="setTab(\''+t+'\')">'+t+(t==='tickets'?ticketBadge_():'')+'</span>';}).join('');
+  document.getElementById('nav').innerHTML = tabs.map(function(t){return '<span class="'+(t===tab?'active':'')+'" onclick="setTab(\''+t+'\')">'+t+(t==='tickets'?ticketBadge_():'')+'</span>';}).join('') +
+    '<span onclick="logoutAdmin()" style="color:var(--danger,#ff6b6b)">log out</span>';
   var emailWarning = (STATE.settings.emailNotificationsEnabled && !STATE.settings.adminEmail) ?
     '<div class="alert"><b>No admin notification email is set.</b> Every admin email — new orders, payout requests, support tickets, KYC submissions — is silently going nowhere. <span style="text-decoration:underline;cursor:pointer" onclick="setTab(\'settings\')">Set one in Settings</span>.</div>' : '';
   document.getElementById('app').innerHTML = emailWarning + ({
@@ -160,8 +171,18 @@ function renderGate(){
   document.getElementById('app').innerHTML = '<div class="card" style="max-width:320px;margin:60px auto"><h2>Admin Access</h2><input id="code" type="password" placeholder="Access code"><button class="btn" style="width:100%" onclick="checkGate()">Enter</button></div>';
 }
 function checkGate(){
-  if(document.getElementById('code').value === STATE.settings.accessCode){ gateOk=true; render(); }
+  var entered = document.getElementById('code').value;
+  if(entered === STATE.settings.accessCode){
+    gateOk=true;
+    try{ localStorage.setItem('nf_admin_code', entered); }catch(e){}
+    render();
+  }
   else alert('Wrong code');
+}
+function logoutAdmin(){
+  gateOk=false;
+  try{ localStorage.removeItem('nf_admin_code'); }catch(e){}
+  render();
 }
 
 // ---------- ORDERS ----------
@@ -929,7 +950,6 @@ function renderSettings(){
     '<label>Trader Profit Split % (share paid out to the trader)</label><input id="s_profitsplit" type="number" value="'+(s.profitSplitPct||80)+'">'+
     '<label>Min Payout (₦)</label><input id="s_minpay" type="number" value="'+s.minPayout+'">'+
     '<label>Min Affiliate Payout (₦)</label><input id="s_minaffpay" type="number" value="'+s.minAffiliatePayout+'">'+
-    '<label>KYC Verification Form URL (Google Form for selfie + NIN photo upload)</label><input id="s_kycform" value="'+(s.kycFormUrl||'')+'" placeholder="https://forms.gle/...">'+
     '<label>Low Stock Threshold</label><input id="s_lowstock" type="number" value="'+s.lowStockThreshold+'">'+
     '<label>Admin Access Code</label><input id="s_code" value="'+s.accessCode+'">'+
     '<label>Admin Notification Email</label><input id="s_adminemail" value="'+(s.adminEmail||'')+'" placeholder="you@example.com">'+
@@ -977,7 +997,6 @@ function saveSettings(){
   s.affiliateDiscountRate=Number(document.getElementById('s_affdisc').value); s.referralDiscountScope=document.getElementById('s_refscope').value;
   s.profitSplitPct=Number(document.getElementById('s_profitsplit').value);
   s.minPayout=Number(document.getElementById('s_minpay').value); s.minAffiliatePayout=Number(document.getElementById('s_minaffpay').value);
-  s.kycFormUrl=document.getElementById('s_kycform').value.trim();
   s.lowStockThreshold=Number(document.getElementById('s_lowstock').value); s.accessCode=document.getElementById('s_code').value;
   s.adminEmail=document.getElementById('s_adminemail').value.trim(); s.emailNotificationsEnabled=document.getElementById('s_emailon').checked;
   save();
