@@ -1,0 +1,197 @@
+// ===== TELEGRAM SUPPORT BOT =====
+// Separate project — same pattern as email.gs and flutterwave.gs. Its only
+// job is to auto-answer common NowFunded questions and, when it can't,
+// forward the message to the admin's own Telegram chat so a human can reply.
+// It never touches nnnn.json — this is a pure message relay, not a system of
+// record. Escalation routing (matching an admin's reply back to the right
+// user) uses Apps Script's CacheService, which is temporary session storage
+// for the bot's own operation, not your business data.
+//
+// SETUP (see chat for full step-by-step):
+// 1. Script Properties: BOT_TOKEN = your bot token, ADMIN_CHAT_ID = your
+//    Telegram numeric chat id.
+// 2. Deploy as a web app (Execute as: Me, Who has access: Anyone). Copy the
+//    /exec URL.
+// 3. Add a Script Property DEPLOY_URL = that /exec URL.
+// 4. Select setWebhook in the function dropdown at the top of the editor and
+//    click Run once. This tells Telegram to start sending messages here.
+
+// ---- Edit these to change what the bot auto-answers ----
+var FAQS = [
+  {
+    keywords: ['withdraw', 'payout', 'cash out', 'cashout', 'pay out'],
+    answer: "💸 Payouts: once your account is on a funded/live phase, request a payout from your Dashboard. There's a minimum payout amount (shown in your Dashboard) and payouts are reviewed by our team before being sent. If yours is overdue, tell me your registered email and I'll get a human to check."
+  },
+  {
+    keywords: ['challenge', 'how does it work', 'how do challenges work', 'phase 1', 'phase 2', 'profit target'],
+    answer: "🏆 Challenges: buy a plan, hit its profit target while staying within the max drawdown limits, and you move to the next phase (and eventually funded). Each plan's exact rules are shown on its details page before checkout — they vary by plan, so double-check the one you bought."
+  },
+  {
+    keywords: ['mt5', 'login', 'password', 'server', 'account details', 'credentials'],
+    answer: "🔑 Your MT5 login, password, and server are issued automatically once your order is confirmed, and shown in your Dashboard. If it's been a while since you paid and you still don't see it, send me your order code and I'll flag it to a human."
+  },
+  {
+    keywords: ['kyc', 'verify', 'verification', 'identity', 'id upload'],
+    answer: "🪪 KYC: go to your Dashboard's identity verification section, submit your ID and details, and wait for approval — you'll need this approved before you can buy a challenge. If it's been pending a long time, tell me your email and I'll get someone to check."
+  },
+  {
+    keywords: ['discount', 'coupon', 'promo code', 'code not working', 'code invalid'],
+    answer: "🏷️ Discount codes are entered at checkout, before you pay. If a code shows invalid or expired, it may be capacity-limited or restricted to certain plans. Try checkout without it, or send me the exact code and I'll get a human to check it."
+  },
+  {
+    keywords: ['refund'],
+    answer: "Refund requests are handled case-by-case by our team. Briefly describe what happened and I'll connect you with a human right away."
+  },
+  {
+    keywords: ['drawdown', 'max loss', 'rules', 'violat'],
+    answer: "📉 Each plan lists its own profit target and max drawdown rules on its details page before checkout — these vary by plan. If your account was closed and you're not sure why, send me your MT5 login number and I'll get a human to check the reason."
+  },
+  {
+    keywords: ['bank transfer', 'transfer details', 'account number', 'how do i pay'],
+    answer: "🏦 Bank transfer details appear automatically once you select a plan at checkout. Transfer the exact amount shown, then tap \"I have made the transfer\" — your order goes to our team for confirmation, usually quick."
+  },
+  {
+    keywords: ['card', 'flutterwave', 'instant payment'],
+    answer: "💳 If instant card/transfer payment is enabled on the site, you'll see a \"Pay with Card / Transfer (Instant)\" button at checkout — this confirms and issues your MT5 login automatically, no waiting on manual confirmation."
+  },
+  {
+    keywords: ['affiliate', 'referral', 'commission'],
+    answer: "🔗 Share your referral link/code from your Dashboard's Affiliate section. You earn commission when someone you referred completes a purchase — your current rate and lifetime earnings are shown there too."
+  },
+  {
+    keywords: ['bnpl', 'buy now pay later', 'installment'],
+    answer: "🗓️ BNPL plans let you pay an upfront amount at checkout, with the remaining balance due once your account reaches the funded phase — the split is shown before you confirm your order."
+  }
+];
+
+// Any message containing one of these skips FAQ matching and goes straight
+// to a human.
+var ESCALATE_KEYWORDS = ['agent', 'human', 'representative', 'real person', 'talk to someone', 'talk to support'];
+
+function doPost(e) {
+  var props = PropertiesService.getScriptProperties();
+  var botToken = props.getProperty('BOT_TOKEN');
+  var adminChatId = props.getProperty('ADMIN_CHAT_ID');
+
+  if (!botToken || !adminChatId) {
+    return ContentService.createTextOutput('missing config');
+  }
+
+  var update;
+  try {
+    update = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return ContentService.createTextOutput('bad payload');
+  }
+
+  if (update.message) {
+    handleMessage_(update.message, botToken, adminChatId);
+  }
+
+  return ContentService.createTextOutput('ok');
+}
+
+function handleMessage_(message, botToken, adminChatId) {
+  var chatId = message.chat.id;
+  var text = (message.text || '').trim();
+
+  // Admin replying to a forwarded escalation -> relay the reply back to the
+  // original user. This is how one admin Telegram account can answer many
+  // different users without any of them seeing each other.
+  if (String(chatId) === String(adminChatId) && message.reply_to_message) {
+    var repliedId = message.reply_to_message.message_id;
+    var cache = CacheService.getScriptCache();
+    var originalChatId = cache.get('esc_' + repliedId);
+    if (originalChatId) {
+      sendMessage_(botToken, originalChatId, text);
+      sendMessage_(botToken, adminChatId, '✅ Sent to user.');
+    } else {
+      sendMessage_(botToken, adminChatId, "Couldn't match this to a user (routing expires after 6 hours) — ask them to message again if it's still unresolved.");
+    }
+    return;
+  }
+
+  if (text === '/start') {
+    sendMessage_(botToken, chatId, "👋 Welcome to NowFunded Support!\n\nAsk me about challenges, payouts, MT5 logins, KYC, discount codes, refunds, or affiliates — I'll answer instantly. If I can't help, just say \"agent\" and I'll connect you to a human.");
+    return;
+  }
+
+  var lowerText = text.toLowerCase();
+
+  var explicitEscalate = ESCALATE_KEYWORDS.some(function(k){ return lowerText.indexOf(k) !== -1; });
+  if (explicitEscalate) {
+    escalate_(botToken, adminChatId, message);
+    return;
+  }
+
+  var faq = FAQS.find(function(f){
+    return f.keywords.some(function(k){ return lowerText.indexOf(k) !== -1; });
+  });
+
+  if (faq) {
+    sendMessage_(botToken, chatId, faq.answer);
+  } else {
+    escalate_(botToken, adminChatId, message);
+  }
+}
+
+function escalate_(botToken, adminChatId, message) {
+  var chatId = message.chat.id;
+  var from = message.from || {};
+  var name = [from.first_name, from.last_name].filter(Boolean).join(' ') || from.username || ('User ' + chatId);
+  var text = message.text || '(no text)';
+
+  var forwardText = '🆘 Support request from ' + name + (from.username ? ' (@' + from.username + ')' : '') + ':\n\n' + text + '\n\nReply to THIS message to answer them.';
+  var result = sendMessage_(botToken, adminChatId, forwardText);
+
+  if (result && result.result && result.result.message_id) {
+    // 21600 seconds = 6 hours, the max CacheService allows.
+    CacheService.getScriptCache().put('esc_' + result.result.message_id, String(chatId), 21600);
+  }
+
+  sendMessage_(botToken, chatId, "I've connected you to our support team — someone will reply here shortly. 🙏");
+}
+
+function sendMessage_(botToken, chatId, text) {
+  var url = 'https://api.telegram.org/bot' + botToken + '/sendMessage';
+  var resp = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ chat_id: chatId, text: text }),
+    muteHttpExceptions: true
+  });
+  try {
+    return JSON.parse(resp.getContentText());
+  } catch (err) {
+    return null;
+  }
+}
+
+// Run this once manually (select it in the function dropdown at the top of
+// the editor, click Run) after deploying and setting DEPLOY_URL.
+function setWebhook() {
+  var props = PropertiesService.getScriptProperties();
+  var botToken = props.getProperty('BOT_TOKEN');
+  var deployUrl = props.getProperty('DEPLOY_URL');
+
+  if (!botToken || !deployUrl) {
+    Logger.log('Set BOT_TOKEN and DEPLOY_URL script properties first.');
+    return;
+  }
+
+  var url = 'https://api.telegram.org/bot' + botToken + '/setWebhook';
+  var resp = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ url: deployUrl }),
+    muteHttpExceptions: true
+  });
+  Logger.log(resp.getContentText());
+}
+
+// Optional: run manually to check webhook status / debug delivery issues.
+function getWebhookInfo() {
+  var botToken = PropertiesService.getScriptProperties().getProperty('BOT_TOKEN');
+  var resp = UrlFetchApp.fetch('https://api.telegram.org/bot' + botToken + '/getWebhookInfo', { muteHttpExceptions: true });
+  Logger.log(resp.getContentText());
+}

@@ -267,6 +267,11 @@
 <div class="toastbox" id="toastbox"></div>
 <div class="bottombar" id="bottomBar"></div>
 <script src="https://unpkg.com/lucide@latest"></script>
+<!-- Flutterwave's inline checkout SDK. Separate from our own backends — only used
+     client-side to open the payment popup. Loaded unconditionally; it does nothing
+     until initiateFlutterwavePayment() calls it, which only happens if the admin
+     has turned the integration on (STATE.settings.flutterwave.enabled). -->
+<script src="https://checkout.flutterwave.com/v3.js"></script>
 
 <script>
 // PASTE YOUR DEPLOYED APPS SCRIPT WEB APP URL HERE (ends in /exec)
@@ -274,6 +279,13 @@ var WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwrtEit40wugkoqeu4RBm0
 // Separate Apps Script project/deployment — just sends email, shares nothing with WEBAPP_URL.
 // Paste the /exec URL from deploying email.gs as its own web app.
 var EMAIL_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzYVMNktyZHhBB1tHozbjLR8yjDIhh807DQThcV8-ms3dLqATpk7WN10wTPPcLzPE3f/exec';
+// Flutterwave verification is a third, independent Apps Script project/deployment
+// (deploy flutterwave.gs on its own — see its header comment). It never touches
+// nnnn.json; this frontend still owns every write. The public key + verify URL are
+// also editable from Admin → Settings (STATE.settings.flutterwave), which take
+// precedence over these hardcoded fallbacks once set.
+var FLW_PUBLIC_KEY_FALLBACK = ''; // e.g. 'FLWPUBK_TEST-xxxxxxxx-X' — optional, safe to expose
+var FLW_VERIFY_URL_FALLBACK = ''; // the /exec URL from deploying flutterwave.gs
 
 var STATE = null;
 var currentUserId = null;
@@ -355,6 +367,7 @@ function boot(){
     .then(function(r){ return r.json(); })
     .then(function(data){
       STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+      knownVersion = STATE._version || 0; // track what we last read, for optimistic-save checks
       seedIfEmpty();
       applySeo();
       restoreSession();
@@ -364,6 +377,7 @@ function boot(){
     .catch(function(err){ document.getElementById('app').innerHTML = '<div class="card">Could not reach backend. Check WEBAPP_URL. '+err+'</div>'; });
   Promise.all([minWait, load]).then(hideSplash);
 }
+var knownVersion = 0; // version of STATE as last read from the backend
 // Overwrites the static fallback meta tags in <head> with whatever's saved in
 // admin's SEO tab (STATE.settings.seo). Helps JS-rendering crawlers/unfurlers
 // pick up live values without needing a redeploy; the static tags in <head>
@@ -396,10 +410,30 @@ function applySeo(){
   setMeta('link#appleTouchIconLink', 'href', seo.favicon);
 }
 // Content-Type: text/plain avoids a CORS preflight (Apps Script can't answer OPTIONS requests).
+// Sends the version STATE was last read at as _expectedVersion. If the backend's
+// Timekeeper library isn't attached yet, it just ignores that field and overwrites
+// as before — this call is safe either way.
 function save(cb){
+  STATE._expectedVersion = knownVersion;
   fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(STATE) })
-    .then(function(){ if(cb) cb(); })
-    .catch(function(err){ alert('Save failed: '+err); });
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res && res.conflict){
+        // Someone else saved in between. Don't silently clobber their change —
+        // reload the current state and ask the user to redo their edit.
+        delete STATE._expectedVersion;
+        return fetch(WEBAPP_URL + '?action=read').then(function(r){ return r.json(); }).then(function(data){
+          STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+          knownVersion = STATE._version || 0;
+          renderNav(); route();
+          alert('This data was just updated elsewhere. The page has been refreshed — please redo your last change.');
+        });
+      }
+      delete STATE._expectedVersion;
+      if(res && typeof res.version === 'number') knownVersion = res.version;
+      if(cb) cb();
+    })
+    .catch(function(err){ delete STATE._expectedVersion; alert('Save failed: '+err); });
 }
 // Fire-and-forget email relay. Frontend builds the whole message; backend (email.gs)
 // just calls MailApp. Never blocks or alerts on failure — an email hiccup shouldn't
@@ -427,6 +461,12 @@ function seedIfEmpty(){
   if(STATE.settings.profitSplitPct===undefined) STATE.settings.profitSplitPct = 80; // % of profit paid to the trader
   if(STATE.settings.adminEmail===undefined) STATE.settings.adminEmail = '';
   if(STATE.settings.emailNotificationsEnabled===undefined) STATE.settings.emailNotificationsEnabled = true;
+  // Flutterwave is now the only payment method on checkout (manual bank
+  // transfer was removed). If this is off, checkout shows a "payments
+  // unavailable" message rather than a working payment option — see
+  // renderCheckoutPayment_.
+  if(!STATE.settings.flutterwave) STATE.settings.flutterwave = {enabled:false, publicKey:'', verifyUrl:''};
+  if(STATE.settings.flutterwave.enabled===undefined) STATE.settings.flutterwave.enabled = false;
   if(!STATE.settings.seo) STATE.settings.seo = {
     title: 'Now Funded — Get Funded. Trade With Clear Daily Limits.',
     description: 'Pass a Now Funded trading challenge and get a funded MT5 account with clear end-of-day drawdown limits, instant funding options, and fast payouts.',
@@ -781,7 +821,7 @@ function renderIndex(){
     '<div class="stat"><i data-lucide="banknote" style="width:18px;height:18px;color:var(--gold)"></i><b data-count="'+s.stats.totalPayouts+'" data-prefix="₦">₦0</b><span>Paid in Payouts</span></div></div>'+
     '<div class="section-title">How It Works</div>'+
     '<div class="grid"><div class="card"><i data-lucide="credit-card" style="width:20px;height:20px;color:var(--accent)"></i><div style="margin-top:8px">1. Choose a challenge</div></div>'+
-    '<div class="card"><i data-lucide="banknote" style="width:20px;height:20px;color:var(--accent)"></i><div style="margin-top:8px">2. Pay via bank transfer</div></div>'+
+    '<div class="card"><i data-lucide="credit-card" style="width:20px;height:20px;color:var(--accent)"></i><div style="margin-top:8px">2. Pay instantly by card or transfer</div></div>'+
     '<div class="card"><i data-lucide="key" style="width:20px;height:20px;color:var(--accent)"></i><div style="margin-top:8px">3. Get your MT5 login</div></div>'+
     '<div class="card"><i data-lucide="trophy" style="width:20px;height:20px;color:var(--gold)"></i><div style="margin-top:8px">4. Trade & get funded</div></div></div>'+
     '<div class="section-title" id="plansSection">Choose Your Plan</div><div class="toggle-label">Plan Type</div><div class="toggle">'+typeHtml+'</div><div class="toggle-label">Drawdown Type</div><div class="toggle sub">'+ddHtml+'</div>'+
@@ -1274,6 +1314,7 @@ function renderTransfersSection_(){
 var checkoutStep = 1;
 var checkoutQty = 1;
 var lastOrderCodes = [];
+var lastOrdersAllConfirmed = true;
 var ackRules = [false,false,false];
 var checkoutFilterType = null;
 var checkoutFilterDD = null;
@@ -1337,7 +1378,7 @@ function renderCheckout(){
     '<label style="margin-top:14px">Number of Accounts</label><input id="co_qty" type="number" min="1" value="'+checkoutQty+'" oninput="checkoutQty=Math.max(1,Number(this.value)||1);applyCheckoutDiscount()">'+
     '<div class="muted" style="margin:-4px 0 8px">Buying more than one? Each account gets its own MT5 login once confirmed.</div>'+
     '<label>Discount Code (optional)</label>'+
-    '<div class="row" style="gap:6px"><input id="co_code" style="flex:1;margin:0" placeholder="Leave blank to use referral discount if eligible" value="'+(window._co_code_prefill||'')+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();applyCheckoutDiscount();}">'+
+    '<div class="row" style="gap:6px"><input id="co_code" style="flex:1;margin:0" placeholder="Leave blank to use referral discount if eligible" value="'+(window._co_code_prefill||'')+'" oninput="window._co_code_prefill=this.value;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();applyCheckoutDiscount();}">'+
     '<button class="btn ghost small" style="flex-shrink:0" onclick="applyCheckoutDiscount()">Apply</button></div>'+
     '<div id="coCardPrice" style="font-size:12px;margin-top:8px;min-height:16px"></div></div>'+
     '<div class="card"><b>Before You Continue</b><div class="muted" style="margin:4px 0 10px">'+ackCount+' of 3 confirmed</div>'+ackHtml+'</div>'+
@@ -1456,7 +1497,7 @@ function renderCheckoutProcessing_(plan){
   return '<div class="card" style="text-align:center;padding:44px 20px">'+
     '<i data-lucide="loader-2" class="spin" style="width:34px;height:34px;color:var(--accent)"></i>'+
     '<div style="font-weight:700;margin-top:16px">Preparing your secure payment…</div>'+
-    '<div class="muted" style="margin-top:4px;font-size:13px">Generating your transfer details, one moment.</div>'+
+    '<div class="muted" style="margin-top:4px;font-size:13px">One moment while we set things up.</div>'+
     '<div class="progress-track" style="max-width:280px;margin:20px auto 0"><i id="checkoutProgressBar"></i></div>'+
     '</div>';
 }
@@ -1465,30 +1506,61 @@ function renderCheckoutPayment_(plan){
   var code = window._co_code || '';
   var calc = computeCheckoutAmount_(plan, code);
   var total = calc.unit * checkoutQty;
-  var b = STATE.settings.bank;
   var u = currentUser();
+  var fw = STATE.settings.flutterwave || {};
+  // Manual bank transfer has been removed from checkout — Flutterwave is now
+  // the only payment path. If it's ever turned off in Admin → Settings, there
+  // is currently no working payment method, so show that plainly instead of
+  // a broken/empty screen.
+  if(!fw.enabled){
+    return '<div id="msg"></div>'+
+      '<div class="card" style="text-align:center;padding:32px 16px">'+
+      '<i data-lucide="alert-triangle" style="width:32px;height:32px;color:var(--warn,#D3403F)"></i>'+
+      '<h2 style="margin:12px 0 4px">Payments are temporarily unavailable</h2>'+
+      '<div class="muted">Please contact support and we\'ll help you complete your purchase.</div>'+
+      '<div class="pw-cancel" style="margin-top:14px" onclick="cancelCheckout()">Back to Dashboard</div>'+
+      '</div>';
+  }
   return '<div id="msg"></div>'+
     '<div class="payment-widget">'+
-    '<div class="pw-head"><b>Pay with TRANSFER</b></div>'+
+    '<div class="pw-head"><b>Complete Payment</b></div>'+
     '<div class="pw-brand"><span class="pw-brand-name">Now&nbsp;<span style="color:var(--accent)">Funded</span></span><div style="text-align:right"><div style="font-size:12px;color:#5B6672">'+(u?u.email:'')+'</div><div style="font-weight:800;color:#141A1F">NGN '+Number(total).toLocaleString()+'</div></div></div>'+
     '<div class="pw-body">'+
-    '<div class="pw-note">Please proceed to transfer the <b style="color:#D3403F">exact amount</b> below:</div>'+
-    '<div class="pw-row"><span>Amount</span><span class="pw-val">NGN '+Number(total).toLocaleString()+' <i data-lucide="copy" class="pw-copy" onclick="copyText(\''+total+'\')"></i></span></div>'+
-    '<div class="pw-row"><span>Account Number</span><span class="pw-val">'+(b.accountNumber||'-')+' <i data-lucide="copy" class="pw-copy" onclick="copyText(\''+(b.accountNumber||'')+'\')"></i></span></div>'+
-    '<div class="pw-row"><span>Account Name</span><span class="pw-val">'+(b.accountName||'-')+'</span></div>'+
-    '<div class="pw-row"><span>Bank</span><span class="pw-val">'+(b.name||'-')+'</span></div>'+
-    '<div class="pw-expiry">This account number expires in <b>20 hours</b></div>'+
-    '<div class="pw-warn">Note: A wrong transfer may take up to 72hrs to be refunded.</div>'+
+    '<div class="pw-row"><span>Amount</span><span class="pw-val">NGN '+Number(total).toLocaleString()+'</span></div>'+
     (isBNPL_(plan) ? '<div class="pw-note" style="margin:10px 0 0;font-size:12px">This is your upfront BNPL payment. The remaining '+naira(bnplSplit_(plan).balance*checkoutQty)+' is due once your account enters the funded phase.</div>' : '')+
-    (b.instructions ? '<div class="pw-note" style="margin:10px 0 0;font-size:12px">'+b.instructions+'</div>' : '')+
-    '<button class="pw-btn-primary" onclick="lockRun(this,submitOrder)">I have made the transfer</button>'+
-    '<button class="pw-btn-outline" onclick="toast(\'Bank transfer is our only payment method right now — more are coming soon.\')"><i data-lucide="refresh-cw" style="width:14px;height:14px"></i> Change payment method</button>'+
+    '<button class="pw-btn-primary" style="background:#F5A623;margin-top:14px" onclick="initiateFlutterwavePayment()">Pay with Card / Transfer</button>'+
+    '<div class="pw-note" style="margin:10px 0 0;font-size:12px;text-align:center">Instant — your MT5 login is issued immediately after payment.</div>'+
     '<div class="pw-cancel" onclick="cancelCheckout()">Cancel Payment</div>'+
     '</div></div>'+
     '<div class="row" style="gap:6px;margin-top:12px;justify-content:center;font-size:12px;color:var(--muted)"><i data-lucide="lock" style="width:12px;height:12px"></i> Secured checkout · your details stay with our verified admin team</div>';
 }
 function cancelCheckout(){ checkoutStep=1; ackRules=[false,false,false]; go('dashboard'); }
-function submitOrder(){
+// Note: the old manual bank-transfer submitOrder() flow has been removed.
+// Flutterwave (initiateFlutterwavePayment / completeFlutterwaveOrder_ below)
+// is now the only way an order gets created.
+// ===== Flutterwave — instant card/transfer payment =====
+// Design: this frontend never trusts the client-side "payment successful" popup
+// callback alone (it can be spoofed or interrupted), so it always round-trips
+// the transaction reference through flutterwave.gs, which calls Flutterwave's
+// server-to-server Verify API with the secret key. Only a verified transaction
+// gets an order created and auto-confirmed (MT5 login assigned immediately —
+// same effect as an admin clicking "Confirm" in admin.html, just automatic).
+// flutterwave.gs is a separate Apps Script deployment; it never writes to
+// nnnn.json, so a bug there cannot corrupt orders/users data — this file still
+// does the one and only save().
+function flwConfig_(){
+  var s = (STATE.settings && STATE.settings.flutterwave) || {};
+  return {
+    enabled: !!s.enabled,
+    publicKey: s.publicKey || FLW_PUBLIC_KEY_FALLBACK,
+    verifyUrl: s.verifyUrl || FLW_VERIFY_URL_FALLBACK
+  };
+}
+function initiateFlutterwavePayment(){
+  var fw = flwConfig_();
+  if(!fw.enabled) return msg('Instant payment is not available right now.','err');
+  if(!fw.publicKey || !fw.verifyUrl) return msg('Payments aren\'t configured yet — please contact support.','err');
+  if(typeof FlutterwaveCheckout !== 'function') return msg('Payment provider failed to load. Check your connection and try again.','err');
   var user = currentUser();
   if(user.kycStatus!=='approved') return msg('Complete identity verification before buying a challenge.','err');
   var plan = STATE.plans.find(function(p){return p.id===(window._co_plan||pendingPlan);});
@@ -1496,21 +1568,113 @@ function submitOrder(){
   var code = window._co_code || '';
   var calc = computeCheckoutAmount_(plan, code);
   if(calc.error) return msg(calc.error,'err');
+  var total = calc.unit * checkoutQty;
+  var txRef = 'nf_'+currentUserId+'_'+Date.now();
+  FlutterwaveCheckout({
+    public_key: fw.publicKey,
+    tx_ref: txRef,
+    amount: total,
+    currency: 'NGN',
+    customer: { email: user.email, name: user.name },
+    customizations: { title: 'Now Funded', description: 'Payment for '+plan.name },
+    callback: function(data){
+      msg('Verifying your payment…','');
+      fetch(fw.verifyUrl, {
+        method: 'POST',
+        headers: {'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ tx_ref: txRef, expectedAmount: total, expectedCurrency: 'NGN' })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        if(res && res.verified){
+          completeFlutterwaveOrder_(plan, calc, txRef, res.flwRef);
+        } else {
+          msg('Payment could not be verified. If you were charged, contact support with reference '+txRef+'.','err');
+        }
+      })
+      .catch(function(err){ msg('Could not verify payment — if you were charged, contact support with reference '+txRef+'. ('+err+')','err'); });
+    },
+    onclose: function(){}
+  });
+}
+function completeFlutterwaveOrder_(plan, calc, txRef, flwRef){
   var codes = [];
+  var orders = [];
   for(var i=0;i<checkoutQty;i++){
-    var order = {id:uid('o'),orderCode:uid('NF').toUpperCase().slice(0,8),userId:currentUserId,planId:plan.id,amount:calc.unit,discountCode:calc.usedDiscountCode,status:'pending',createdAt:new Date().toISOString()};
+    var order = {id:uid('o'),orderCode:uid('NF').toUpperCase().slice(0,8),userId:currentUserId,planId:plan.id,amount:calc.unit,discountCode:calc.usedDiscountCode,status:'pending',createdAt:new Date().toISOString(),paymentMethod:'flutterwave',flwTxRef:txRef,flwRef:flwRef};
     STATE.orders.push(order);
+    orders.push(order);
     codes.push(order.orderCode);
   }
+  orders.forEach(function(order){ autoConfirmOrder_(order); });
   lastOrderCodes = codes;
-  sendMail(adminEmail_(), 'New order awaiting confirmation', 'User '+(user.email||user.name||currentUserId)+' placed '+checkoutQty+' order(s) for plan "'+plan.name+'". Order code(s): '+codes.join(', ')+'.');
+  lastOrdersAllConfirmed = orders.every(function(o){ return o.status==='confirmed'; });
   save(function(){ checkoutStep=5; ackRules=[false,false,false]; render(); });
 }
+// Mirrors admin.html's confirmOrder() — same MT5 assignment, trader account
+// creation, affiliate crediting, and notifications an admin would trigger by
+// hand, just run automatically the instant Flutterwave verifies the payment.
+function pctFromRules_(rules, labelSubstr){
+  if(!rules) return null;
+  var r = rules.find(function(x){return (x.label||'').toLowerCase().indexOf(labelSubstr)!==-1;});
+  if(!r) return null;
+  var n = parseFloat(String(r.value).replace('%',''));
+  return isNaN(n) ? null : n;
+}
+function autoConfirmOrder_(order){
+  var plan = STATE.plans.find(function(p){return p.id===order.planId;});
+  // Universal pool: any unused login of the matching ACCOUNT SIZE can be handed
+  // out, regardless of which plan (drawdown type / step count) it was bought
+  // under — mirrors admin.html's confirmOrder().
+  var login = plan ? STATE.mt5Pool.find(function(l){return l.size===plan.size && !l.used;}) : null;
+  if(!plan || !login){
+    // No unused MT5 login available right now — leave the order pending rather
+    // than block the payment. It's already tagged paymentMethod:'flutterwave',
+    // so admin sees at a glance that payment is done and just needs to assign
+    // a login manually once more stock is uploaded.
+    STATE.notifications.push({id:uid('nt'),userId:order.userId,message:'Payment received for order '+order.orderCode+'. Your MT5 login is being assigned and will arrive shortly.',read:false,createdAt:new Date().toISOString()});
+    return;
+  }
+  login.used = true; login.assignedTo = order.userId;
+  order.status='confirmed'; order.confirmedAt=new Date().toISOString();
+  if(order.discountCode){
+    var dc = STATE.discountCodes.find(function(d){return d.code===order.discountCode;});
+    if(dc) dc.usedCount = (dc.usedCount||0) + 1;
+  }
+  var profitTargetPct = pctFromRules_(plan.rules, 'profit target');
+  var maxDrawdownPct = pctFromRules_(plan.rules, 'max drawdown') || pctFromRules_(plan.rules, 'max overall drawdown');
+  var acc = {id:uid('ta'),userId:order.userId,orderId:order.id,mt5PoolId:login.id,login:login.login,password:login.password,server:login.server,
+    category:plan.category,planId:plan.id,stage:'phase1',status:'active',reason:null,startBalance:plan.size||0,currentBalance:plan.size||0,equity:plan.size||0,
+    profitTargetPct:profitTargetPct,maxDrawdownPct:maxDrawdownPct,
+    balanceHistory:[],poolReturned:false,createdAt:new Date().toISOString()};
+  STATE.traderAccounts.push(acc);
+  STATE.notifications.push({id:uid('nt'),userId:order.userId,message:'Your order '+order.orderCode+' was confirmed. MT5 login assigned!',read:false,createdAt:new Date().toISOString()});
+  var buyer = STATE.users.find(function(x){return x.id===order.userId;});
+  sendMail(buyer?buyer.email:'', 'Your order '+order.orderCode+' was confirmed', 'Good news — your payment was verified and your order '+order.orderCode+' has been confirmed. An MT5 login has been assigned. Log in to your dashboard to view your account details.');
+  // Credit affiliate commission now that the purchase is verified as paid — same
+  // rule admin.html's confirmOrder() follows for bank-transfer orders.
+  if(buyer && buyer.referredBy){
+    var referrer = STATE.users.find(function(x){return x.id===buyer.referredBy;});
+    if(referrer){
+      var commissionPct = affCurrentTier_(referrer).current.commissionPct || 0;
+      var commission = Math.round((order.amount||0) * commissionPct / 100);
+      if(commission > 0){
+        referrer.affiliateEarnings = (referrer.affiliateEarnings||0) + commission;
+        STATE.notifications.push({id:uid('nt'),userId:referrer.id,message:'You earned '+naira(commission)+' commission ('+commissionPct+'%) from a referred purchase.',read:false,createdAt:new Date().toISOString()});
+      }
+    }
+  }
+  if(!STATE.activityLog) STATE.activityLog = [];
+  STATE.activityLog.push({id:uid('lg'),actor:'flutterwave',action:'confirm_order',details:order.orderCode,createdAt:new Date().toISOString()});
+}
 function renderCheckoutDone_(){
+  var statusMsg = lastOrdersAllConfirmed ?
+    'Payment confirmed! Your MT5 login'+(lastOrderCodes.length>1?'s have':' has')+' been issued — check your dashboard.' :
+    'Payment received. We\'re assigning your MT5 login now and it\'ll appear on your dashboard shortly.';
   return '<div class="card" style="text-align:center;padding:32px 16px;border-left:3px solid var(--accent)">'+
     '<i data-lucide="check-circle" style="width:40px;height:40px;color:var(--accent)"></i>'+
-    '<h2 style="margin:12px 0 4px">Order'+(lastOrderCodes.length>1?'s':'')+' Submitted</h2>'+
-    '<div class="muted">Awaiting admin confirmation. You\'ll get an MT5 login for each account once confirmed.</div>'+
+    '<h2 style="margin:12px 0 4px">Order'+(lastOrderCodes.length>1?'s':'')+' Complete</h2>'+
+    '<div class="muted">'+statusMsg+'</div>'+
     '<div class="card" style="margin-top:14px;text-align:left">'+lastOrderCodes.map(function(c,i){return '<div class="kv">Account '+(i+1)+' — Order Code <b>'+c+'</b></div>';}).join('')+'</div>'+
     '<button class="btn" style="width:100%;margin-top:14px" onclick="checkoutStep=1;checkoutQty=1;go(\'dashboard\')">Go to Dashboard</button></div>';
 }
