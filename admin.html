@@ -60,6 +60,7 @@ function boot(){
     .then(function(r){ return r.json(); })
     .then(function(data){
       STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+      knownVersion = STATE._version || 0; // track what we last read, for optimistic-save checks
       // Persistent login: if a previously-entered code is saved and still
       // matches the current access code, skip the gate. Storing the code
       // itself (not just a boolean) means changing the access code in
@@ -72,11 +73,34 @@ function boot(){
     })
     .catch(function(err){ document.getElementById('app').innerHTML = '<div class="card">Could not reach backend. Check WEBAPP_URL. '+err+'</div>'; });
 }
+var knownVersion = 0; // version of STATE as last read from the backend
 // Content-Type: text/plain avoids a CORS preflight (Apps Script can't answer OPTIONS requests).
+// Sends the version STATE was last read at as _expectedVersion. If the backend's
+// Timekeeper library isn't attached yet, it just ignores that field and overwrites
+// as before — this call is safe either way.
 function save(cb){
+  STATE._expectedVersion = knownVersion;
   fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(STATE) })
-    .then(function(){ if(cb) cb(); render(); })
-    .catch(function(err){ alert('Save failed: '+err); });
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res && res.conflict){
+        // Someone else saved in between (another admin tab, or the live site
+        // writing an order/payout). Don't silently clobber their change —
+        // reload the current state and ask the user to redo their edit.
+        delete STATE._expectedVersion;
+        return fetch(WEBAPP_URL + '?action=read').then(function(r){ return r.json(); }).then(function(data){
+          STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+          knownVersion = STATE._version || 0;
+          alert('This data was just updated elsewhere. The page has been refreshed — please redo your last change.');
+          render();
+        });
+      }
+      delete STATE._expectedVersion;
+      if(res && typeof res.version === 'number') knownVersion = res.version;
+      if(cb) cb();
+      render();
+    })
+    .catch(function(err){ delete STATE._expectedVersion; alert('Save failed: '+err); });
 }
 // Fire-and-forget email relay — mirrors App.html's sendMail(). Admin builds the message,
 // backend (email.gs) just sends it. Never blocks/alerts on failure.

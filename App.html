@@ -355,6 +355,7 @@ function boot(){
     .then(function(r){ return r.json(); })
     .then(function(data){
       STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+      knownVersion = STATE._version || 0; // track what we last read, for optimistic-save checks
       seedIfEmpty();
       applySeo();
       restoreSession();
@@ -364,6 +365,7 @@ function boot(){
     .catch(function(err){ document.getElementById('app').innerHTML = '<div class="card">Could not reach backend. Check WEBAPP_URL. '+err+'</div>'; });
   Promise.all([minWait, load]).then(hideSplash);
 }
+var knownVersion = 0; // version of STATE as last read from the backend
 // Overwrites the static fallback meta tags in <head> with whatever's saved in
 // admin's SEO tab (STATE.settings.seo). Helps JS-rendering crawlers/unfurlers
 // pick up live values without needing a redeploy; the static tags in <head>
@@ -396,10 +398,30 @@ function applySeo(){
   setMeta('link#appleTouchIconLink', 'href', seo.favicon);
 }
 // Content-Type: text/plain avoids a CORS preflight (Apps Script can't answer OPTIONS requests).
+// Sends the version STATE was last read at as _expectedVersion. If the backend's
+// Timekeeper library isn't attached yet, it just ignores that field and overwrites
+// as before — this call is safe either way.
 function save(cb){
+  STATE._expectedVersion = knownVersion;
   fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(STATE) })
-    .then(function(){ if(cb) cb(); })
-    .catch(function(err){ alert('Save failed: '+err); });
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res && res.conflict){
+        // Someone else saved in between. Don't silently clobber their change —
+        // reload the current state and ask the user to redo their edit.
+        delete STATE._expectedVersion;
+        return fetch(WEBAPP_URL + '?action=read').then(function(r){ return r.json(); }).then(function(data){
+          STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+          knownVersion = STATE._version || 0;
+          renderNav(); route();
+          alert('This data was just updated elsewhere. The page has been refreshed — please redo your last change.');
+        });
+      }
+      delete STATE._expectedVersion;
+      if(res && typeof res.version === 'number') knownVersion = res.version;
+      if(cb) cb();
+    })
+    .catch(function(err){ delete STATE._expectedVersion; alert('Save failed: '+err); });
 }
 // Fire-and-forget email relay. Frontend builds the whole message; backend (email.gs)
 // just calls MailApp. Never blocks or alerts on failure — an email hiccup shouldn't
