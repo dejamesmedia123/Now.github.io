@@ -91,7 +91,7 @@ function save(cb){
         return fetch(WEBAPP_URL + '?action=read').then(function(r){ return r.json(); }).then(function(data){
           STATE = (typeof data === 'string') ? JSON.parse(data) : data;
           knownVersion = STATE._version || 0;
-          alert('This data was just updated elsewhere. The page has been refreshed — please redo your last change.');
+          alert('Something went wrong saving. The page has been refreshed — please try again.');
           render();
         });
       }
@@ -116,6 +116,23 @@ function sendMail(to, subject, body){
 function userEmail_(userId){ var u = STATE.users.find(function(x){return x.id===userId;}); return u ? u.email : ''; }
 function uid(p){ return p+'_'+Math.random().toString(36).slice(2,9); }
 function naira(n){ return '₦'+Number(n||0).toLocaleString(); }
+function sizeLabel_(n){ return Number(n||0).toLocaleString(); } // account size, e.g. "200,000" — not currency
+// Builds a CSV file client-side and triggers a browser download — no backend involved.
+function exportCsv_(filename, headers, rows){
+  var esc = function(v){
+    v = (v===null || v===undefined) ? '' : String(v);
+    if(/[",\n]/.test(v)) v = '"'+v.replace(/"/g,'""')+'"';
+    return v;
+  };
+  var lines = [headers.map(esc).join(',')].concat(rows.map(function(r){ return r.map(esc).join(','); }));
+  var csv = lines.join('\r\n');
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+}
 
 // ---- BNPL (Buy Now Pay Later) display helpers ----
 // Same fixed 40/60 upfront/balance split used in App.html's checkout —
@@ -152,6 +169,7 @@ function render(){
   if(STATE.settings.profitSplitPct===undefined) STATE.settings.profitSplitPct=80;
   if(STATE.settings.adminEmail===undefined) STATE.settings.adminEmail='';
   if(STATE.settings.emailNotificationsEnabled===undefined) STATE.settings.emailNotificationsEnabled=true;
+  if(!STATE.settings.flutterwave) STATE.settings.flutterwave = {enabled:false, publicKey:'', verifyUrl:''};
   if(!STATE.settings.seo) STATE.settings.seo = {
     title: 'Now Funded — Get Funded. Trade With Clear Daily Limits.',
     description: 'Pass a Now Funded trading challenge and get a funded MT5 account with clear end-of-day drawdown limits, instant funding options, and fast payouts.',
@@ -211,29 +229,50 @@ function logoutAdmin(){
 
 // ---------- ORDERS ----------
 var orderSearch='', orderStatusFilter='all';
-function renderOrders(){
-  var low = STATE.mt5Pool.reduce(function(m,l){ if(!l.used){ m[l.category]=(m[l.category]||0)+1; } return m; },{});
-  var lowHtml = Object.keys(low).filter(function(c){return low[c] < STATE.settings.lowStockThreshold;})
-    .map(function(c){return '<div class="alert">Low stock: '+c+' — only '+low[c]+' unused logins left</div>';}).join('');
-  var closed = STATE.traderAccounts.filter(function(a){return a.status==='closed' && !a.poolReturned;});
-  var closedHtml = closed.map(function(a){return '<div class="alert">Needs password reset: '+a.login+' ('+a.category+') — <button class="btn small" onclick="returnToPool(\''+a.id+'\')">Mark Reset & Return to Pool</button></div>';}).join('');
-  var filtered = STATE.orders.filter(function(o){
+function filteredOrders_(){
+  return STATE.orders.filter(function(o){
     var user = STATE.users.find(function(u){return u.id===o.userId;}) || {};
     var matchesSearch = !orderSearch || o.orderCode.toLowerCase().indexOf(orderSearch)!==-1 || (user.email||'').toLowerCase().indexOf(orderSearch)!==-1;
     var matchesStatus = orderStatusFilter==='all' || o.status===orderStatusFilter;
     return matchesSearch && matchesStatus;
   });
+}
+function exportOrdersCsv(){
+  var headers = ['Order Code','User Email','Plan','Account Size','Amount','Status','Payment Method','Flutterwave Ref','Created At','Confirmed At'];
+  var rows = filteredOrders_().map(function(o){
+    var user = STATE.users.find(function(u){return u.id===o.userId;}) || {};
+    var plan = STATE.plans.find(function(p){return p.id===o.planId;}) || {};
+    return [o.orderCode, user.email||'', plan.name||'', plan.size||'', o.amount, o.status, o.paymentMethod||'', o.flwRef||'', o.createdAt||'', o.confirmedAt||''];
+  });
+  exportCsv_('orders-'+Date.now()+'.csv', headers, rows);
+}
+function renderOrders(){
+  // Grouped by account SIZE now (pool is universal across plans of the same size),
+  // not by the old per-plan category tag.
+  var low = STATE.mt5Pool.reduce(function(m,l){ if(!l.used && l.size){ m[l.size]=(m[l.size]||0)+1; } return m; },{});
+  var lowHtml = Object.keys(low).filter(function(s){return low[s] < STATE.settings.lowStockThreshold;})
+    .map(function(s){return '<div class="alert">Low stock: '+sizeLabel_(s)+' accounts — only '+low[s]+' unused logins left</div>';}).join('');
+  var closed = STATE.traderAccounts.filter(function(a){return a.status==='closed' && !a.poolReturned;});
+  var closedHtml = closed.map(function(a){return '<div class="alert">Needs password reset: '+a.login+' ('+a.category+') — <button class="btn small" onclick="returnToPool(\''+a.id+'\')">Mark Reset & Return to Pool</button></div>';}).join('');
+  var filtered = filteredOrders_();
   var rows = filtered.slice().reverse().map(function(o){
     var user = STATE.users.find(function(u){return u.id===o.userId;}) || {};
     var plan = STATE.plans.find(function(p){return p.id===o.planId;}) || {};
     var bnplNote = isBNPL_(plan) ? '<div class="muted" style="font-size:11px">BNPL upfront — '+naira(bnplSplit_(plan).balance)+' due on funded phase</div>' : '';
-    return '<tr><td>'+o.orderCode+'</td><td>'+(user.email||'-')+'</td><td>'+(plan.name||'-')+(isBNPL_(plan)?' <span class="badge b-active" style="font-size:10px">BNPL</span>':'')+'</td><td>'+naira(o.amount)+bnplNote+'</td>'+
+    // Flutterwave orders are auto-confirmed the instant payment is verified, but if
+    // no unused MT5 login existed at that moment they stay 'pending' with payment
+    // already received — surface that clearly so admin knows not to wait on a
+    // transfer that already happened, just to assign a login once stock is added.
+    var paidNote = (o.paymentMethod==='flutterwave') ?
+      (o.status==='pending' ? '<div class="muted" style="font-size:11px;color:#D3403F">Paid via Flutterwave — no MT5 login was available to auto-assign</div>' : '<div class="muted" style="font-size:11px">Paid via Flutterwave'+(o.flwRef?' · ref '+o.flwRef:'')+'</div>') : '';
+    return '<tr><td>'+o.orderCode+'</td><td>'+(user.email||'-')+'</td><td>'+(plan.name||'-')+(isBNPL_(plan)?' <span class="badge b-active" style="font-size:10px">BNPL</span>':'')+'</td><td>'+naira(o.amount)+bnplNote+paidNote+'</td>'+
       '<td><span class="badge b-'+o.status+'">'+o.status+'</span></td>'+
       '<td>'+(o.status==='pending'? '<button class="btn small" onclick="confirmOrder(\''+o.id+'\')">Confirm</button> <button class="btn small danger" onclick="rejectOrder(\''+o.id+'\')">Reject</button>':'-')+'</td></tr>';
   }).join('');
   return '<h2>Orders</h2>'+lowHtml+closedHtml+
     '<div class="card row"><input id="ord_search" placeholder="Search code or email" value="'+orderSearch+'" oninput="orderSearch=this.value.toLowerCase();render()" style="max-width:220px">'+
-    '<select id="ord_status" onchange="orderStatusFilter=this.value;render()"><option value="all">All</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="rejected">Rejected</option></select></div>'+
+    '<select id="ord_status" onchange="orderStatusFilter=this.value;render()"><option value="all">All</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="rejected">Rejected</option></select>'+
+    '<button class="btn small" onclick="exportOrdersCsv()">Export CSV</button></div>'+
     '<div class="card"><table><tr><th>Code</th><th>User</th><th>Plan</th><th>Amount</th><th>Status</th><th>Action</th></tr>'+rows+'</table></div>';
 }
 function pctFromRules_(rules, labelSubstr){
@@ -246,8 +285,10 @@ function pctFromRules_(rules, labelSubstr){
 function confirmOrder(orderId){
   var order = STATE.orders.find(function(o){return o.id===orderId;});
   var plan = STATE.plans.find(function(p){return p.id===order.planId;});
-  var login = STATE.mt5Pool.find(function(l){return l.category===plan.category && !l.used;});
-  if(!login) return alert('No unused MT5 login in this category. Upload more logins first.');
+  // Universal pool: any unused login of the matching ACCOUNT SIZE can be handed
+  // out, regardless of which plan (drawdown type / step count) it was bought under.
+  var login = STATE.mt5Pool.find(function(l){return l.size===plan.size && !l.used;});
+  if(!login) return alert('No unused '+sizeLabel_(plan.size)+' MT5 login available. Upload more logins first.');
   login.used = true; login.assignedTo = order.userId;
   order.status='confirmed'; order.confirmedAt=new Date().toISOString();
   if(order.discountCode){
@@ -330,7 +371,7 @@ function renderPlans(){
     '<div style="margin-top:8px"><input id="pt_name" placeholder="New plan type name"><button class="btn" onclick="addPT()">Add Plan Type</button></div></div>'+
     '<h2>Plans</h2><div class="card"><table><tr><th>Name</th><th>Drawdown</th><th>Type</th><th>Category</th><th>Price</th><th></th></tr>'+rows+'</table></div>'+
     '<div class="card"><h4>Add Plan</h4><label>Name</label><input id="p_name"><label>Drawdown Type</label><select id="p_dd">'+ddOpts+'</select>'+
-    '<label>Plan Type</label><select id="p_pt">'+ptOpts+'</select><label>Category tag (must match MT5 pool category)</label><input id="p_cat" placeholder="e.g. equity-2step-10k">'+
+    '<label>Plan Type</label><select id="p_pt">'+ptOpts+'</select><label>Category tag (display label only — MT5 logins are now assigned by Account Size, not by this tag)</label><input id="p_cat" placeholder="e.g. equity-2step-10k">'+
     '<label>Account Size</label><input id="p_size" type="number"><label>Price (₦)</label><input id="p_price" type="number">'+
     '<label>Rules (label:value, one per line, e.g. Profit Target:8%)</label><textarea id="p_rules" rows="4"></textarea>'+
     '<label><input type="checkbox" id="p_popular" style="width:auto;margin-right:6px">Mark as Popular</label>'+
@@ -380,7 +421,7 @@ function editPlan(id){
   var p = STATE.plans.find(function(x){return x.id===id;});
   var name = prompt('Plan name', p.name);
   if(name===null) return;
-  var category = prompt('Category tag (must match an MT5 pool category)', p.category);
+  var category = prompt('Category tag (display label only — no longer used to match MT5 logins; that\'s done by Account Size)', p.category);
   if(category===null) return;
   var price = prompt('Price (₦)', p.price);
   if(price===null) return;
@@ -392,42 +433,139 @@ function editPlan(id){
 function delPlan(id){ STATE.plans = STATE.plans.filter(function(p){return p.id!==id;}); save(); }
 
 // ---------- MT5 POOL ----------
+// Universal pool: logins are matched to orders by ACCOUNT SIZE only (l.size ===
+// plan.size). "category" is kept purely as an optional cosmetic label (shown in
+// the table, copied onto trader accounts for display) — it plays no role in
+// which login gets handed out.
 var poolShowAdvanced = false;
+var poolSearch = '', poolPage = 0;
+var POOL_PAGE_SIZE = 25;
+function filteredPool_(){
+  var all = STATE.mt5Pool.slice().reverse();
+  if(!poolSearch) return all;
+  return all.filter(function(l){
+    return (l.login||'').toLowerCase().indexOf(poolSearch)!==-1 ||
+      (l.category||'').toLowerCase().indexOf(poolSearch)!==-1 ||
+      String(l.size||'').indexOf(poolSearch)!==-1;
+  });
+}
+function exportPoolCsv(){
+  var headers = ['Login','Password','Server','Account Size','Category','Status','Assigned To User ID'];
+  var rows = STATE.mt5Pool.map(function(l){
+    return [l.login, l.password, l.server, l.size||'', l.category||'', l.used?'Used':'Unused', l.assignedTo||''];
+  });
+  exportCsv_('mt5-pool-'+Date.now()+'.csv', headers, rows);
+}
 function renderPool(){
+  var unsized = STATE.mt5Pool.filter(function(l){return !l.size;}).length;
+  var migrateHtml = unsized ? (
+    '<div class="card"><h4>Migrate Existing Pool to Universal</h4>'+
+    '<div class="alert">'+unsized+' login(s) still have no Account Size set, so they can\'t be auto-assigned yet.</div>'+
+    '<div class="muted">Run this once: it tags every existing login (used and unused) with an Account Size — inferred from the trader account it was already assigned to (if used), or from a plan sharing its old category tag (if unused). Already-sized logins are left untouched, so it\'s safe to run more than once.</div>'+
+    '<button class="btn warn" style="margin-top:8px" onclick="migratePoolToUniversal()">Run Migration</button></div>'
+  ) : '';
   var counts = {};
-  STATE.mt5Pool.forEach(function(l){ counts[l.category]=counts[l.category]||{used:0,unused:0}; counts[l.category][l.used?'used':'unused']++; });
-  var countHtml = Object.keys(counts).map(function(c){return '<div class="kv">'+c+': '+counts[c].unused+' unused / '+counts[c].used+' used</div>';}).join('');
-  var rows = STATE.mt5Pool.slice(-100).reverse().map(function(l){return '<tr><td>'+l.login+'</td><td>'+l.category+'</td><td>'+(l.used?'Used':'Unused')+'</td></tr>';}).join('');
+  STATE.mt5Pool.forEach(function(l){ var key=l.size||'unsized'; counts[key]=counts[key]||{used:0,unused:0}; counts[key][l.used?'used':'unused']++; });
+  var sizeKeys = Object.keys(counts).sort(function(a,b){ if(a==='unsized') return 1; if(b==='unsized') return -1; return Number(a)-Number(b); });
+  var countHtml = sizeKeys.map(function(k){return '<div class="kv">'+(k==='unsized'?'<span style="color:var(--danger)">No size set</span>':sizeLabel_(k))+': '+counts[k].unused+' unused / '+counts[k].used+' used</div>';}).join('');
+  var filtered = filteredPool_();
+  var totalPages = Math.max(1, Math.ceil(filtered.length / POOL_PAGE_SIZE));
+  if(poolPage >= totalPages) poolPage = totalPages - 1;
+  if(poolPage < 0) poolPage = 0;
+  var pageItems = filtered.slice(poolPage*POOL_PAGE_SIZE, poolPage*POOL_PAGE_SIZE + POOL_PAGE_SIZE);
+  var rows = pageItems.map(function(l){
+    return '<tr><td>'+l.login+'</td><td>'+(l.size?sizeLabel_(l.size):'<span style="color:var(--danger)">none</span>')+'</td><td>'+(l.category||'-')+'</td><td>'+(l.used?'Used':'Unused')+'</td>'+
+      '<td><button class="btn small" onclick="editPoolSize(\''+l.id+'\')">'+(l.size?'Edit Size':'Set Size')+'</button></td></tr>';
+  }).join('');
+  var pagerHtml = '<div class="row" style="margin-top:8px"><span class="muted">'+filtered.length+' login(s)'+(poolSearch?' matching “'+poolSearch+'”':'')+' · Page '+(poolPage+1)+' of '+totalPages+'</span>'+
+    '<div><button class="btn small" '+(poolPage<=0?'disabled':'')+' onclick="poolPage--;render()">‹ Prev</button> <button class="btn small" '+(poolPage>=totalPages-1?'disabled':'')+' onclick="poolPage++;render()">Next ›</button></div></div>';
   var categoryOpts = Array.from(new Set(STATE.plans.map(function(p){return p.category;}).filter(Boolean)));
   var catDatalist = '<datalist id="pool_cat_list">'+categoryOpts.map(function(c){return '<option value="'+c+'">';}).join('')+'</datalist>';
-  return '<h2>MT5 Login Pool</h2><div class="card">'+(countHtml||'<div class="muted">No logins added yet.</div>')+'</div>'+
+  return '<h2>MT5 Login Pool</h2>'+migrateHtml+
+    '<div class="card">'+(countHtml||'<div class="muted">No logins added yet.</div>')+'</div>'+
     '<div class="card"><h4>Add a Login</h4>'+catDatalist+
     '<div class="field-row"><div><label>Login</label><input id="pf_login" placeholder="e.g. 1005812"></div><div><label>Password</label><input id="pf_password" placeholder="Investor/master password"></div></div>'+
-    '<div class="field-row"><div><label>Server</label><input id="pf_server" placeholder="e.g. NF-Live"></div><div><label>Category</label><input id="pf_category" list="pool_cat_list" placeholder="Must match a plan category"></div></div>'+
+    '<div class="field-row"><div><label>Server</label><input id="pf_server" placeholder="e.g. NF-Live"></div><div><label>Account Size</label><input id="pf_size" type="number" placeholder="e.g. 200000"></div></div>'+
+    '<label>Category tag (optional, cosmetic label only — e.g. equity-2step)</label><input id="pf_category" list="pool_cat_list" placeholder="Optional">'+
     '<button class="btn" style="width:100%" onclick="addPoolLogin()">Add to Pool</button>'+
     '<div class="muted" style="margin-top:8px;cursor:pointer" onclick="poolShowAdvanced=!poolShowAdvanced;render()">'+(poolShowAdvanced?'▾ Hide':'▸ Show')+' advanced: bulk-paste JSON</div>'+
-    (poolShowAdvanced? '<div style="margin-top:8px"><textarea id="pool_json" rows="6" placeholder=\'[{"login":"1001","password":"abc","server":"NF-Live","category":"equity-2step-10k"}]\'></textarea>'+
+    (poolShowAdvanced? '<div style="margin-top:8px"><textarea id="pool_json" rows="6" placeholder=\'[{"login":"1001","password":"abc","server":"NF-Live","size":200000,"category":"equity-2step (optional)"}]\'></textarea>'+
       '<button class="btn warn" onclick="addPool()">Add Bulk JSON</button></div>' : '')+
     '</div>'+
-    '<div class="card"><table><tr><th>Login</th><th>Category</th><th>Status</th></tr>'+rows+'</table></div>';
+    '<div class="card row"><input id="pool_search" placeholder="Search login, size, or category" value="'+poolSearch+'" oninput="poolSearch=this.value.toLowerCase();poolPage=0;render()" style="max-width:260px">'+
+    '<button class="btn small" onclick="exportPoolCsv()">Export CSV</button></div>'+
+    '<div class="card"><table><tr><th>Login</th><th>Size</th><th>Category</th><th>Status</th><th></th></tr>'+rows+'</table>'+pagerHtml+'</div>';
 }
 function addPoolLogin(){
   var login = document.getElementById('pf_login').value.trim();
   var password = document.getElementById('pf_password').value.trim();
   var server = document.getElementById('pf_server').value.trim();
+  var size = Number(document.getElementById('pf_size').value);
   var category = document.getElementById('pf_category').value.trim();
-  if(!login || !password || !server || !category) return alert('Fill in all fields');
-  STATE.mt5Pool.push({id:uid('m5'),login:login,password:password,server:server,category:category,used:false,assignedTo:null});
-  log('add_pool', '1 login ('+category+')');
-  ['pf_login','pf_password','pf_server','pf_category'].forEach(function(id){ document.getElementById(id).value=''; });
+  if(!login || !password || !server || !size) return alert('Fill in Login, Password, Server and Account Size');
+  if(STATE.mt5Pool.some(function(l){return l.login===login;})) return alert('Login "'+login+'" is already in the pool. Each MT5 login can only be added once.');
+  STATE.mt5Pool.push({id:uid('m5'),login:login,password:password,server:server,size:size,category:category,used:false,assignedTo:null});
+  log('add_pool', '1 login ('+sizeLabel_(size)+')');
+  ['pf_login','pf_password','pf_server','pf_size','pf_category'].forEach(function(id){ document.getElementById(id).value=''; });
   save();
+}
+function editPoolSize(id){
+  var l = STATE.mt5Pool.find(function(x){return x.id===id;});
+  var size = prompt('Account size for login '+l.login+' (e.g. 200000)', l.size||'');
+  if(size===null) return;
+  var n = Number(size);
+  if(!n) return alert('Enter a valid number');
+  l.size = n;
+  log('set_pool_size', l.login+' -> '+sizeLabel_(n));
+  save();
+}
+function migratePoolToUniversal(){
+  if(!confirm('This tags every MT5 pool login (used and unused) with an Account Size, so any available login of the right size can be handed out regardless of which plan it was originally stocked for. Already-sized logins are skipped. Continue?')) return;
+  var updated = 0, unresolved = [];
+  STATE.mt5Pool.forEach(function(l){
+    if(l.size) return;
+    var size = null;
+    // Used logins: trust the trader account it was actually assigned to —
+    // startBalance was set to the plan's size at the moment of assignment.
+    if(l.used){
+      var ta = STATE.traderAccounts.find(function(a){ return a.mt5PoolId===l.id; });
+      if(ta && ta.startBalance) size = ta.startBalance;
+    }
+    // Unused (or no matching trader account found): fall back to a plan that
+    // still shares this login's old category tag.
+    if(!size && l.category){
+      var plan = STATE.plans.find(function(p){ return p.category===l.category; });
+      if(plan && plan.size) size = plan.size;
+    }
+    // Last resort: parse a number straight out of the category string itself
+    // (e.g. "equity-2step-10k" -> 10000, "200000" -> 200000).
+    if(!size && l.category){
+      var m = String(l.category).match(/(\d+(?:\.\d+)?)\s*(k)?/i);
+      if(m){ size = parseFloat(m[1]); if(m[2]) size *= 1000; }
+    }
+    if(size){ l.size = size; updated++; }
+    else { unresolved.push(l.login); }
+  });
+  log('migrate_pool_universal', updated+' logins tagged'+(unresolved.length? ', '+unresolved.length+' unresolved':''));
+  save();
+  alert('Migration done.\n\n'+updated+' logins were tagged with a size automatically.'+
+    (unresolved.length? '\n\n'+unresolved.length+' could not be auto-resolved (no matching trader account, plan, or parseable category): '+unresolved.join(', ')+'.\nUse "Set Size" on each in the table below to fix manually.' : ''));
 }
 function addPool(){
   try{
     var arr = JSON.parse(document.getElementById('pool_json').value);
-    arr.forEach(function(l){ STATE.mt5Pool.push({id:uid('m5'),login:l.login,password:l.password,server:l.server,category:l.category,used:false,assignedTo:null}); });
-    log('add_pool', arr.length+' logins');
+    var existingLogins = {};
+    STATE.mt5Pool.forEach(function(l){ existingLogins[l.login] = true; });
+    var added = 0, skipped = [];
+    arr.forEach(function(l){
+      if(existingLogins[l.login]){ skipped.push(l.login); return; } // already in pool
+      existingLogins[l.login] = true; // guard against duplicates within the same pasted batch too
+      STATE.mt5Pool.push({id:uid('m5'),login:l.login,password:l.password,server:l.server,size:Number(l.size)||null,category:l.category||'',used:false,assignedTo:null});
+      added++;
+    });
+    log('add_pool', added+' logins'+(skipped.length? ' ('+skipped.length+' duplicates skipped)':''));
     save();
+    if(skipped.length) alert(added+' login(s) added. '+skipped.length+' login(s) skipped as duplicates (already in the pool or repeated in the pasted list): '+skipped.join(', '));
   }catch(e){ alert('Invalid JSON: '+e.message); }
 }
 
@@ -526,13 +664,22 @@ function deleteTier(id){
 }
 
 // ---------- PAYOUTS ----------
+function exportPayoutsCsv(){
+  var headers = ['User Email','Type','Amount','Bank Details','Status'];
+  var rows = STATE.payoutRequests.map(function(p){
+    var u = STATE.users.find(function(x){return x.id===p.userId;})||{};
+    return [u.email||'', p.type, p.amount, p.bankDetails||'', p.status];
+  });
+  exportCsv_('payouts-'+Date.now()+'.csv', headers, rows);
+}
 function renderPayouts(){
   var rows = STATE.payoutRequests.slice().reverse().map(function(p){
     var u = STATE.users.find(function(x){return x.id===p.userId;})||{};
     return '<tr><td>'+(u.email||'-')+'</td><td>'+p.type+'</td><td>'+naira(p.amount)+'</td><td>'+p.bankDetails+'</td><td><span class="badge b-'+p.status+'">'+p.status+'</span></td>'+
       '<td>'+(p.status==='pending'?'<button class="btn small" onclick="approvePayout(\''+p.id+'\')">Approve</button> <button class="btn small danger" onclick="denyPayout(\''+p.id+'\')">Deny</button>':'-')+'</td></tr>';
   }).join('');
-  return '<h2>Payout Requests</h2><div class="card"><table><tr><th>User</th><th>Type</th><th>Amount</th><th>Bank</th><th>Status</th><th></th></tr>'+rows+'</table></div>';
+  return '<h2>Payout Requests</h2><div class="card row"><span class="muted">'+STATE.payoutRequests.length+' request(s)</span><button class="btn small" onclick="exportPayoutsCsv()">Export CSV</button></div>'+
+    '<div class="card"><table><tr><th>User</th><th>Type</th><th>Amount</th><th>Bank</th><th>Status</th><th></th></tr>'+rows+'</table></div>';
 }
 // Flags a possible self-referral: does this user share a NIN or bank account with
 // someone they're connected to via the referral program (as referrer or referred),
@@ -963,6 +1110,8 @@ function clearDatabase(){
 
 function renderSettings(){
   var s = STATE.settings;
+  if(!s.flutterwave) s.flutterwave = {enabled:false, publicKey:'', verifyUrl:''};
+  var fw = s.flutterwave;
   return '<h2>Settings</h2><div class="card"><label>Bank Name</label><input id="s_bname" value="'+s.bank.name+'">'+
     '<label>Account Number</label><input id="s_bnum" value="'+s.bank.accountNumber+'"><label>Account Name</label><input id="s_baccname" value="'+s.bank.accountName+'">'+
     '<label>Instructions</label><input id="s_binstr" value="'+s.bank.instructions+'">'+
@@ -978,7 +1127,13 @@ function renderSettings(){
     '<label>Admin Access Code</label><input id="s_code" value="'+s.accessCode+'">'+
     '<label>Admin Notification Email</label><input id="s_adminemail" value="'+(s.adminEmail||'')+'" placeholder="you@example.com">'+
     '<label><input type="checkbox" id="s_emailon" '+(s.emailNotificationsEnabled!==false?'checked':'')+' style="width:auto;margin-right:6px"> Send email notifications</label>'+
-    '<button class="btn" onclick="saveSettings()">Save Settings</button></div>';
+    '<button class="btn" onclick="saveSettings()">Save Settings</button></div>'+
+    '<div class="card"><b>Flutterwave (Instant Card / Transfer Payment)</b>'+
+    '<div class="muted" style="margin:6px 0">Separate, independent deployment (flutterwave.gs) — verifies payments server-side and never touches this database directly. Off by default; flip on only once you\'ve tested with Flutterwave test keys.</div>'+
+    '<label><input type="checkbox" id="fw_enabled" '+(fw.enabled?'checked':'')+' style="width:auto;margin-right:6px"> Enable instant Flutterwave payment on checkout</label>'+
+    '<label>Flutterwave Public Key</label><input id="fw_pubkey" value="'+(fw.publicKey||'')+'" placeholder="FLWPUBK_TEST-xxxxxxxx-X">'+
+    '<label>flutterwave.gs Verify URL (the /exec URL from deploying it)</label><input id="fw_verifyurl" value="'+(fw.verifyUrl||'')+'" placeholder="https://script.google.com/macros/s/.../exec">'+
+    '<button class="btn" onclick="saveFlutterwaveSettings()">Save Flutterwave Settings</button></div>';
 }
 function renderSeo(){
   var seo = STATE.settings.seo || {};
@@ -1023,6 +1178,14 @@ function saveSettings(){
   s.minPayout=Number(document.getElementById('s_minpay').value); s.minAffiliatePayout=Number(document.getElementById('s_minaffpay').value);
   s.lowStockThreshold=Number(document.getElementById('s_lowstock').value); s.accessCode=document.getElementById('s_code').value;
   s.adminEmail=document.getElementById('s_adminemail').value.trim(); s.emailNotificationsEnabled=document.getElementById('s_emailon').checked;
+  save();
+}
+function saveFlutterwaveSettings(){
+  if(!STATE.settings.flutterwave) STATE.settings.flutterwave = {};
+  STATE.settings.flutterwave.enabled = document.getElementById('fw_enabled').checked;
+  STATE.settings.flutterwave.publicKey = document.getElementById('fw_pubkey').value.trim();
+  STATE.settings.flutterwave.verifyUrl = document.getElementById('fw_verifyurl').value.trim();
+  log('update_flutterwave_settings', STATE.settings.flutterwave.enabled ? 'enabled' : 'disabled');
   save();
 }
 
