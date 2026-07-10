@@ -517,7 +517,8 @@ function seedIfEmpty(){
   if(planFilterType===null && STATE.planTypes.length) planFilterType = STATE.planTypes[0].id;
   // Backfill arrays/fields for state saved before these features existed.
   if(!STATE.chatMessages) STATE.chatMessages = [];
-  STATE.users.forEach(function(u){ if(u.kycStatus===undefined) u.kycStatus='none'; if(u.kycCountry===undefined) u.kycCountry=''; if(u.kycIdNumber===undefined) u.kycIdNumber=''; if(u.bookStage===undefined) u.bookStage='bbook'; });
+  STATE.users.forEach(function(u){ if(u.kycStatus===undefined) u.kycStatus='none'; if(u.kycCountry===undefined) u.kycCountry=''; if(u.kycIdNumber===undefined) u.kycIdNumber=''; if(u.bookStage===undefined) u.bookStage='bbook';
+    if(u.isBrandedAffiliate===undefined) u.isBrandedAffiliate=false; if(u.otcBonusPerBlock===undefined) u.otcBonusPerBlock=10000; if(u.otcBlockSize===undefined) u.otcBlockSize=10; if(u.otcMilestonesPaid===undefined) u.otcMilestonesPaid=0; if(u.otcBonusEarned===undefined) u.otcBonusEarned=0; });
   if(!STATE.settings.avatarLibrary || !STATE.settings.avatarLibrary.length) STATE.settings.avatarLibrary = DEFAULT_AVATARS;
   STATE.users.forEach(function(u){ if(u.avatarUrl===undefined) u.avatarUrl=''; });
   if(STATE.settings.referralDiscountScope===undefined) STATE.settings.referralDiscountScope = 'every'; // 'every' | 'first'
@@ -1771,6 +1772,7 @@ function autoConfirmOrder_(order){
         referrer.affiliateEarnings = (referrer.affiliateEarnings||0) + commission;
         STATE.notifications.push({id:uid('nt'),userId:referrer.id,message:'You earned '+naira(commission)+' commission ('+commissionPct+'%) from a referred purchase.',read:false,createdAt:new Date().toISOString()});
       }
+      creditOtcBonus_(referrer, affReferredConverted_(referrer));
     }
   }
   if(!STATE.activityLog) STATE.activityLog = [];
@@ -1929,6 +1931,26 @@ function affCurrentTier_(u){
   for(var i=0;i<tiers.length;i++){ if(tiers[i].minReferrals>converted){ next=tiers[i]; break; } }
   return {tiers:tiers, current:current||{name:'Affiliate Starter',commissionPct:STATE.settings.affiliateCommissionRate||15}, next:next, converted:converted};
 }
+// Mirrors admin.html's creditOtcBonus_() — Branded (OTC) affiliates earn a custom,
+// per-affiliate milestone bonus (₦ per block of N converted referrals) on top of
+// standard commission, folded into affiliateEarnings so it withdraws the same way.
+// otcMilestonesPaid guards against re-crediting a block already paid.
+function creditOtcBonus_(referrer, converted){
+  if(!referrer || !referrer.isBrandedAffiliate) return;
+  var blockSize = referrer.otcBlockSize || 0;
+  var perBlock = referrer.otcBonusPerBlock || 0;
+  if(blockSize<=0 || perBlock<=0) return;
+  var blocksReached = Math.floor(converted / blockSize);
+  var alreadyPaid = referrer.otcMilestonesPaid || 0;
+  var newBlocks = blocksReached - alreadyPaid;
+  if(newBlocks > 0){
+    var bonus = newBlocks * perBlock;
+    referrer.affiliateEarnings = (referrer.affiliateEarnings||0) + bonus;
+    referrer.otcBonusEarned = (referrer.otcBonusEarned||0) + bonus;
+    referrer.otcMilestonesPaid = blocksReached;
+    STATE.notifications.push({id:uid('nt'),userId:referrer.id,message:'You earned '+naira(bonus)+' OTC milestone bonus ('+newBlocks+' block'+(newBlocks>1?'s':'')+' of '+blockSize+' converted referrals).',read:false,createdAt:new Date().toISOString()});
+  }
+}
 function renderAffiliate(){
   if(!currentUserId) return renderLogin();
   var u = currentUser();
@@ -1938,12 +1960,15 @@ function renderAffiliate(){
   var rate = referred.length ? (converted/referred.length*100) : 0;
   var tierInfo = affCurrentTier_(u);
   // Toolkit always has a tab — an empty state explains it when no graphics are
-  // uploaded yet, rather than the tab silently disappearing.
+  // uploaded yet, rather than the tab silently disappearing. Branded (OTC)
+  // affiliates get an extra tab showing their custom milestone bonus.
   var tabs = ['dashboard','milestones','links','referrals','earnings','toolkit'];
-  var tabLabels = {dashboard:'Dashboard',milestones:'Milestones',links:'My Links',referrals:'Referrals',earnings:'Earnings',toolkit:'Toolkit'};
-  var header = '<div class="row" style="align-items:center"><h2 style="margin:0">Affiliate</h2>'+
+  var tabLabels = {dashboard:'Dashboard',milestones:'Milestones',links:'My Links',referrals:'Referrals',earnings:'Earnings',toolkit:'Toolkit',otc:'Branded Bonus'};
+  if(u.isBrandedAffiliate) tabs.push('otc');
+  var header = '<div class="row" style="align-items:center"><h2 style="margin:0">'+(u.isBrandedAffiliate?'Branded Affiliate':'Affiliate')+'</h2>'+
     '<button class="btn small" onclick="go(\'payout\')">Cash Out '+naira(affiliateAvailable_(u.id))+'</button></div>'+
-    '<div class="row" style="gap:6px;margin:6px 0 14px"><span class="badge b-active">'+tierInfo.current.name+'</span><span class="muted">'+tierInfo.current.commissionPct+'% commission</span></div>'+
+    '<div class="row" style="gap:6px;margin:6px 0 14px"><span class="badge b-active">'+tierInfo.current.name+'</span><span class="muted">'+tierInfo.current.commissionPct+'% commission</span>'+
+    (u.isBrandedAffiliate?'<span class="badge" style="border-color:var(--gold);color:var(--gold)">Branded Partner</span>':'')+'</div>'+
     '<div class="aff-flow">'+
       '<div class="aff-flow-seg"><div class="n">'+referred.length+'</div><div class="l">Referred</div></div>'+
       '<div class="aff-flow-seg"><div class="n">'+converted+'</div><div class="l">Converted'+(referred.length?' · '+rate.toFixed(0)+'%':'')+'</div></div>'+
@@ -1958,7 +1983,28 @@ function renderAffiliate(){
   else if(affTab==='referrals') body = renderAffReferrals_(referred);
   else if(affTab==='earnings') body = renderAffEarnings_(u);
   else if(affTab==='toolkit') body = renderAffToolkit_();
+  else if(affTab==='otc') body = u.isBrandedAffiliate ? renderAffOtc_(u, converted) : renderAffDashboard_(u, tierInfo, referred);
   return header + body;
+}
+// Branded (OTC) affiliate milestone-bonus screen — shown only to users flagged as
+// a Branded Affiliate by an admin. Terms (₦ per block / block size) are set
+// per-affiliate to match their individually negotiated OTC agreement.
+function renderAffOtc_(u, converted){
+  var blockSize = u.otcBlockSize || 0;
+  var perBlock = u.otcBonusPerBlock || 0;
+  var blocksReached = blockSize>0 ? Math.floor(converted/blockSize) : 0;
+  var intoBlock = blockSize>0 ? (converted - blocksReached*blockSize) : 0;
+  var remaining = blockSize>0 ? Math.max(0, blockSize - intoBlock) : 0;
+  var pct = blockSize>0 ? Math.round((intoBlock/blockSize)*100) : 0;
+  return '<div class="card">'+
+    '<div class="row"><b>Milestone Bonus</b><span class="badge" style="border-color:var(--gold);color:var(--gold)">'+naira(perBlock)+' / '+blockSize+' referrals</span></div>'+
+    '<div class="muted" style="font-size:12px;margin-top:4px">On top of your standard tiered commission, you earn '+naira(perBlock)+' for every '+blockSize+' converted referrals — uncapped, and it never resets.</div>'+
+    '<div style="background:rgba(255,255,255,.08);border-radius:10px;height:10px;margin-top:12px;overflow:hidden"><div style="background:var(--gold);height:100%;width:'+pct+'%"></div></div>'+
+    '<div class="muted" style="font-size:12px;margin-top:6px">'+intoBlock+' of '+blockSize+' converted referrals into your next block'+(remaining?' — '+remaining+' more to go':'')+'</div>'+
+    '</div>'+
+    '<div class="card"><div class="row"><b>Blocks Reached</b><span style="font-size:18px;font-weight:800">'+blocksReached+'</span></div>'+
+    '<div class="row" style="margin-top:6px"><b>Total Bonus Earned</b><span style="font-size:18px;font-weight:800;color:var(--gold)">'+naira(u.otcBonusEarned||0)+'</span></div>'+
+    '<div class="muted" style="font-size:12px;margin-top:6px">Bonuses are credited automatically to your affiliate balance the moment a block is reached, and withdraw the same way as standard commission.</div></div>';
 }
 function renderAffDashboard_(u, tierInfo, referred){
   var remaining = tierInfo.next ? Math.max(0, tierInfo.next.minReferrals-tierInfo.converted) : 0;
