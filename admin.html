@@ -102,6 +102,46 @@ function save(cb){
     })
     .catch(function(err){ delete STATE._expectedVersion; alert('Save failed: '+err); });
 }
+// ---- AUTO-RETRYING SAVE (for narrow, self-contained actions) ----
+// Use this instead of save() for actions that just look up a record by id and
+// mutate it (confirm/reject/approve/deny/add/etc). On a version conflict, the
+// write never persisted server-side — there's nothing of ours to lose — so we
+// silently refetch the latest data and re-run the SAME action closure against
+// it, rather than bothering the person with "please try again". This only
+// works because actionFn re-looks-up everything it needs from the live STATE
+// each time it runs, instead of closing over stale references.
+// actionFn can return false to abort (e.g. a real precondition failed, like
+// "no login of this size left" — it should alert/message the user itself
+// before returning false); anything else proceeds to save.
+var SAVE_ACTION_MAX_RETRIES = 3;
+function saveAction(actionFn, cb, attempt){
+  attempt = attempt || 0;
+  if(actionFn() === false){ render(); return; }
+  STATE._expectedVersion = knownVersion;
+  fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(STATE) })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res && res.conflict){
+        delete STATE._expectedVersion;
+        return fetch(WEBAPP_URL + '?action=read').then(function(r){ return r.json(); }).then(function(data){
+          STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+          knownVersion = STATE._version || 0;
+          if(attempt >= SAVE_ACTION_MAX_RETRIES){
+            // Real hot contention (rare) — give up retrying quietly and say so.
+            render();
+            alert('Something went wrong saving. The page has been refreshed — please try again.');
+            return;
+          }
+          saveAction(actionFn, cb, attempt+1);
+        });
+      }
+      delete STATE._expectedVersion;
+      if(res && typeof res.version === 'number') knownVersion = res.version;
+      if(cb) cb();
+      render();
+    })
+    .catch(function(err){ delete STATE._expectedVersion; alert('Save failed: '+err); });
+}
 // Fire-and-forget email relay — mirrors App.html's sendMail(). Admin builds the message,
 // backend (email.gs) just sends it. Never blocks/alerts on failure.
 function sendMail(to, subject, body){
@@ -283,67 +323,75 @@ function pctFromRules_(rules, labelSubstr){
   return isNaN(n) ? null : n;
 }
 function confirmOrder(orderId){
-  var order = STATE.orders.find(function(o){return o.id===orderId;});
-  var plan = STATE.plans.find(function(p){return p.id===order.planId;});
-  // Universal pool: any unused login of the matching ACCOUNT SIZE can be handed
-  // out, regardless of which plan (drawdown type / step count) it was bought under.
-  var login = STATE.mt5Pool.find(function(l){return l.size===plan.size && !l.used;});
-  if(!login) return alert('No unused '+sizeLabel_(plan.size)+' MT5 login available. Upload more logins first.');
-  login.used = true; login.assignedTo = order.userId;
-  order.status='confirmed'; order.confirmedAt=new Date().toISOString();
-  if(order.discountCode){
-    var dc = STATE.discountCodes.find(function(d){return d.code===order.discountCode;});
-    if(dc) dc.usedCount = (dc.usedCount||0) + 1;
-  }
-  var profitTargetPct = pctFromRules_(plan.rules, 'profit target');
-  var maxDrawdownPct = pctFromRules_(plan.rules, 'max drawdown') || pctFromRules_(plan.rules, 'max overall drawdown');
-  var acc = {id:uid('ta'),userId:order.userId,orderId:order.id,mt5PoolId:login.id,login:login.login,password:login.password,server:login.server,
-    category:plan.category,planId:plan.id,stage:'phase1',status:'active',reason:null,startBalance:plan.size||0,currentBalance:plan.size||0,equity:plan.size||0,
-    profitTargetPct:profitTargetPct,maxDrawdownPct:maxDrawdownPct,
-    balanceHistory:[],poolReturned:false,createdAt:new Date().toISOString()};
-  STATE.traderAccounts.push(acc);
-  STATE.notifications.push({id:uid('nt'),userId:order.userId,message:'Your order '+order.orderCode+' was confirmed. MT5 login assigned!',read:false,createdAt:new Date().toISOString()});
-  sendMail(userEmail_(order.userId), 'Your order '+order.orderCode+' was confirmed', 'Good news — your order '+order.orderCode+' has been confirmed and an MT5 login has been assigned. Log in to your dashboard to view your account details.');
-  // Credit affiliate commission now that the purchase is confirmed as real (paid) —
-  // this is the only point a referred user's order is verified, so it's the only
-  // correct place to pay the referrer for it.
-  var buyer = STATE.users.find(function(x){return x.id===order.userId;});
-  if(buyer && buyer.referredBy){
-    var referrer = STATE.users.find(function(x){return x.id===buyer.referredBy;});
-    if(referrer){
-      var commissionPct = affCurrentTier_(referrer).current.commissionPct || 0;
-      var commission = Math.round((order.amount||0) * commissionPct / 100);
-      if(commission > 0){
-        referrer.affiliateEarnings = (referrer.affiliateEarnings||0) + commission;
-        STATE.notifications.push({id:uid('nt'),userId:referrer.id,message:'You earned '+naira(commission)+' commission ('+commissionPct+'%) from a referred purchase.',read:false,createdAt:new Date().toISOString()});
-        log('credit_commission', referrer.email+' +'+naira(commission)+' at '+commissionPct+'% (order '+order.orderCode+')');
+  saveAction(function(){
+    var order = STATE.orders.find(function(o){return o.id===orderId;});
+    if(!order || order.status!=='pending'){ alert('This order is no longer pending — no changes made.'); return false; }
+    var plan = STATE.plans.find(function(p){return p.id===order.planId;});
+    // Universal pool: any unused login of the matching ACCOUNT SIZE can be handed
+    // out, regardless of which plan (drawdown type / step count) it was bought under.
+    var login = STATE.mt5Pool.find(function(l){return l.size===plan.size && !l.used;});
+    if(!login){ alert('No unused '+sizeLabel_(plan.size)+' MT5 login available. Upload more logins first.'); return false; }
+    login.used = true; login.assignedTo = order.userId;
+    order.status='confirmed'; order.confirmedAt=new Date().toISOString();
+    if(order.discountCode){
+      var dc = STATE.discountCodes.find(function(d){return d.code===order.discountCode;});
+      if(dc) dc.usedCount = (dc.usedCount||0) + 1;
+    }
+    var profitTargetPct = pctFromRules_(plan.rules, 'profit target');
+    var maxDrawdownPct = pctFromRules_(plan.rules, 'max drawdown') || pctFromRules_(plan.rules, 'max overall drawdown');
+    var acc = {id:uid('ta'),userId:order.userId,orderId:order.id,mt5PoolId:login.id,login:login.login,password:login.password,server:login.server,
+      category:plan.category,planId:plan.id,stage:'phase1',status:'active',reason:null,startBalance:plan.size||0,currentBalance:plan.size||0,equity:plan.size||0,
+      profitTargetPct:profitTargetPct,maxDrawdownPct:maxDrawdownPct,
+      balanceHistory:[],poolReturned:false,createdAt:new Date().toISOString()};
+    STATE.traderAccounts.push(acc);
+    STATE.notifications.push({id:uid('nt'),userId:order.userId,message:'Your order '+order.orderCode+' was confirmed. MT5 login assigned!',read:false,createdAt:new Date().toISOString()});
+    sendMail(userEmail_(order.userId), 'Your order '+order.orderCode+' was confirmed', 'Good news — your order '+order.orderCode+' has been confirmed and an MT5 login has been assigned. Log in to your dashboard to view your account details.');
+    // Credit affiliate commission now that the purchase is confirmed as real (paid) —
+    // this is the only point a referred user's order is verified, so it's the only
+    // correct place to pay the referrer for it.
+    var buyer = STATE.users.find(function(x){return x.id===order.userId;});
+    if(buyer && buyer.referredBy){
+      var referrer = STATE.users.find(function(x){return x.id===buyer.referredBy;});
+      if(referrer){
+        var commissionPct = affCurrentTier_(referrer).current.commissionPct || 0;
+        var commission = Math.round((order.amount||0) * commissionPct / 100);
+        if(commission > 0){
+          referrer.affiliateEarnings = (referrer.affiliateEarnings||0) + commission;
+          STATE.notifications.push({id:uid('nt'),userId:referrer.id,message:'You earned '+naira(commission)+' commission ('+commissionPct+'%) from a referred purchase.',read:false,createdAt:new Date().toISOString()});
+          log('credit_commission', referrer.email+' +'+naira(commission)+' at '+commissionPct+'% (order '+order.orderCode+')');
+        }
       }
     }
-  }
-  log('confirm_order', order.orderCode);
-  save();
+    log('confirm_order', order.orderCode);
+  });
 }
 function rejectOrder(orderId){
-  var order = STATE.orders.find(function(o){return o.id===orderId;});
-  order.status='rejected';
-  STATE.notifications.push({id:uid('nt'),userId:order.userId,message:'Your order '+order.orderCode+' was rejected — no matching payment found.',read:false,createdAt:new Date().toISOString()});
-  sendMail(userEmail_(order.userId), 'Your order '+order.orderCode+' was rejected', 'Your order '+order.orderCode+' was rejected — we couldn\'t find a matching payment. If you believe this is an error, please open a support ticket.');
-  log('reject_order', order.orderCode);
-  save();
+  saveAction(function(){
+    var order = STATE.orders.find(function(o){return o.id===orderId;});
+    if(!order || order.status!=='pending'){ alert('This order is no longer pending — no changes made.'); return false; }
+    order.status='rejected';
+    STATE.notifications.push({id:uid('nt'),userId:order.userId,message:'Your order '+order.orderCode+' was rejected — no matching payment found.',read:false,createdAt:new Date().toISOString()});
+    sendMail(userEmail_(order.userId), 'Your order '+order.orderCode+' was rejected', 'Your order '+order.orderCode+' was rejected — we couldn\'t find a matching payment. If you believe this is an error, please open a support ticket.');
+    log('reject_order', order.orderCode);
+  });
 }
 function markClosed(accId, reason){
-  var a = STATE.traderAccounts.find(function(x){return x.id===accId;});
-  a.status='closed'; a.reason=reason; a.poolReturned=false;
-  log('mark_closed', a.login+' ('+reason+')');
-  save();
+  saveAction(function(){
+    var a = STATE.traderAccounts.find(function(x){return x.id===accId;});
+    if(!a || a.status==='closed'){ return false; } // already closed (e.g. by a concurrent retry) — nothing to do
+    a.status='closed'; a.reason=reason; a.poolReturned=false;
+    log('mark_closed', a.login+' ('+reason+')');
+  });
 }
 function returnToPool(accId){
-  var a = STATE.traderAccounts.find(function(x){return x.id===accId;});
-  var login = STATE.mt5Pool.find(function(l){return l.id===a.mt5PoolId;});
-  if(login){ login.used=false; login.assignedTo=null; }
-  a.poolReturned = true;
-  log('return_to_pool', a.login);
-  save();
+  saveAction(function(){
+    var a = STATE.traderAccounts.find(function(x){return x.id===accId;});
+    if(!a || a.poolReturned){ return false; } // already returned — nothing to do
+    var login = STATE.mt5Pool.find(function(l){return l.id===a.mt5PoolId;});
+    if(login){ login.used=false; login.assignedTo=null; }
+    a.poolReturned = true;
+    log('return_to_pool', a.login);
+  });
 }
 
 // ---------- PLANS (+ drawdown types / plan types) ----------
@@ -497,76 +545,92 @@ function renderPool(){
     '<div class="card"><table><tr><th>Login</th><th>Size</th><th>Category</th><th>Status</th><th></th></tr>'+rows+'</table>'+pagerHtml+'</div>';
 }
 function addPoolLogin(){
+  // Read the form once, up front — these are the values the admin actually typed,
+  // and they must stay fixed across any silent retry (the retry closure below
+  // re-checks the POOL for duplicates against fresh data, but re-reading the DOM
+  // after a retry could pick up already-cleared fields).
   var login = document.getElementById('pf_login').value.trim();
   var password = document.getElementById('pf_password').value.trim();
   var server = document.getElementById('pf_server').value.trim();
   var size = Number(document.getElementById('pf_size').value);
   var category = document.getElementById('pf_category').value.trim();
   if(!login || !password || !server || !size) return alert('Fill in Login, Password, Server and Account Size');
-  if(STATE.mt5Pool.some(function(l){return l.login===login;})) return alert('Login "'+login+'" is already in the pool. Each MT5 login can only be added once.');
-  STATE.mt5Pool.push({id:uid('m5'),login:login,password:password,server:server,size:size,category:category,used:false,assignedTo:null});
-  log('add_pool', '1 login ('+sizeLabel_(size)+')');
-  ['pf_login','pf_password','pf_server','pf_size','pf_category'].forEach(function(id){ document.getElementById(id).value=''; });
-  save();
+  saveAction(function(){
+    if(STATE.mt5Pool.some(function(l){return l.login===login;})){ alert('Login "'+login+'" is already in the pool. Each MT5 login can only be added once.'); return false; }
+    STATE.mt5Pool.push({id:uid('m5'),login:login,password:password,server:server,size:size,category:category,used:false,assignedTo:null});
+    log('add_pool', '1 login ('+sizeLabel_(size)+')');
+  }, function(){
+    ['pf_login','pf_password','pf_server','pf_size','pf_category'].forEach(function(id){ var el = document.getElementById(id); if(el) el.value=''; });
+  });
 }
 function editPoolSize(id){
   var l = STATE.mt5Pool.find(function(x){return x.id===id;});
-  var size = prompt('Account size for login '+l.login+' (e.g. 200000)', l.size||'');
-  if(size===null) return;
-  var n = Number(size);
+  if(!l) return;
+  var sizeStr = prompt('Account size for login '+l.login+' (e.g. 200000)', l.size||'');
+  if(sizeStr===null) return;
+  var n = Number(sizeStr);
   if(!n) return alert('Enter a valid number');
-  l.size = n;
-  log('set_pool_size', l.login+' -> '+sizeLabel_(n));
-  save();
+  saveAction(function(){
+    var login = STATE.mt5Pool.find(function(x){return x.id===id;});
+    if(!login) return false;
+    login.size = n;
+    log('set_pool_size', login.login+' -> '+sizeLabel_(n));
+  });
 }
 function migratePoolToUniversal(){
   if(!confirm('This tags every MT5 pool login (used and unused) with an Account Size, so any available login of the right size can be handed out regardless of which plan it was originally stocked for. Already-sized logins are skipped. Continue?')) return;
-  var updated = 0, unresolved = [];
-  STATE.mt5Pool.forEach(function(l){
-    if(l.size) return;
-    var size = null;
-    // Used logins: trust the trader account it was actually assigned to —
-    // startBalance was set to the plan's size at the moment of assignment.
-    if(l.used){
-      var ta = STATE.traderAccounts.find(function(a){ return a.mt5PoolId===l.id; });
-      if(ta && ta.startBalance) size = ta.startBalance;
-    }
-    // Unused (or no matching trader account found): fall back to a plan that
-    // still shares this login's old category tag.
-    if(!size && l.category){
-      var plan = STATE.plans.find(function(p){ return p.category===l.category; });
-      if(plan && plan.size) size = plan.size;
-    }
-    // Last resort: parse a number straight out of the category string itself
-    // (e.g. "equity-2step-10k" -> 10000, "200000" -> 200000).
-    if(!size && l.category){
-      var m = String(l.category).match(/(\d+(?:\.\d+)?)\s*(k)?/i);
-      if(m){ size = parseFloat(m[1]); if(m[2]) size *= 1000; }
-    }
-    if(size){ l.size = size; updated++; }
-    else { unresolved.push(l.login); }
+  var result = {updated:0, unresolved:[]};
+  saveAction(function(){
+    result.updated = 0; result.unresolved = [];
+    STATE.mt5Pool.forEach(function(l){
+      if(l.size) return;
+      var size = null;
+      // Used logins: trust the trader account it was actually assigned to —
+      // startBalance was set to the plan's size at the moment of assignment.
+      if(l.used){
+        var ta = STATE.traderAccounts.find(function(a){ return a.mt5PoolId===l.id; });
+        if(ta && ta.startBalance) size = ta.startBalance;
+      }
+      // Unused (or no matching trader account found): fall back to a plan that
+      // still shares this login's old category tag.
+      if(!size && l.category){
+        var plan = STATE.plans.find(function(p){ return p.category===l.category; });
+        if(plan && plan.size) size = plan.size;
+      }
+      // Last resort: parse a number straight out of the category string itself
+      // (e.g. "equity-2step-10k" -> 10000, "200000" -> 200000).
+      if(!size && l.category){
+        var m = String(l.category).match(/(\d+(?:\.\d+)?)\s*(k)?/i);
+        if(m){ size = parseFloat(m[1]); if(m[2]) size *= 1000; }
+      }
+      if(size){ l.size = size; result.updated++; }
+      else { result.unresolved.push(l.login); }
+    });
+    log('migrate_pool_universal', result.updated+' logins tagged'+(result.unresolved.length? ', '+result.unresolved.length+' unresolved':''));
+  }, function(){
+    alert('Migration done.\n\n'+result.updated+' logins were tagged with a size automatically.'+
+      (result.unresolved.length? '\n\n'+result.unresolved.length+' could not be auto-resolved (no matching trader account, plan, or parseable category): '+result.unresolved.join(', ')+'.\nUse "Set Size" on each in the table below to fix manually.' : ''));
   });
-  log('migrate_pool_universal', updated+' logins tagged'+(unresolved.length? ', '+unresolved.length+' unresolved':''));
-  save();
-  alert('Migration done.\n\n'+updated+' logins were tagged with a size automatically.'+
-    (unresolved.length? '\n\n'+unresolved.length+' could not be auto-resolved (no matching trader account, plan, or parseable category): '+unresolved.join(', ')+'.\nUse "Set Size" on each in the table below to fix manually.' : ''));
 }
 function addPool(){
-  try{
-    var arr = JSON.parse(document.getElementById('pool_json').value);
+  var arr;
+  try{ arr = JSON.parse(document.getElementById('pool_json').value); }
+  catch(e){ return alert('Invalid JSON: '+e.message); }
+  var result = {added:0, skipped:[]};
+  saveAction(function(){
     var existingLogins = {};
     STATE.mt5Pool.forEach(function(l){ existingLogins[l.login] = true; });
-    var added = 0, skipped = [];
+    result.added = 0; result.skipped = [];
     arr.forEach(function(l){
-      if(existingLogins[l.login]){ skipped.push(l.login); return; } // already in pool
+      if(existingLogins[l.login]){ result.skipped.push(l.login); return; } // already in pool
       existingLogins[l.login] = true; // guard against duplicates within the same pasted batch too
       STATE.mt5Pool.push({id:uid('m5'),login:l.login,password:l.password,server:l.server,size:Number(l.size)||null,category:l.category||'',used:false,assignedTo:null});
-      added++;
+      result.added++;
     });
-    log('add_pool', added+' logins'+(skipped.length? ' ('+skipped.length+' duplicates skipped)':''));
-    save();
-    if(skipped.length) alert(added+' login(s) added. '+skipped.length+' login(s) skipped as duplicates (already in the pool or repeated in the pasted list): '+skipped.join(', '));
-  }catch(e){ alert('Invalid JSON: '+e.message); }
+    log('add_pool', result.added+' logins'+(result.skipped.length? ' ('+result.skipped.length+' duplicates skipped)':''));
+  }, function(){
+    if(result.skipped.length) alert(result.added+' login(s) added. '+result.skipped.length+' login(s) skipped as duplicates (already in the pool or repeated in the pasted list): '+result.skipped.join(', '));
+  });
 }
 
 // ---------- DISCOUNT CODES ----------
@@ -725,20 +789,25 @@ function selfReferralFlag_(userId){
   return reasons.length ? reasons.join('; ') : null;
 }
 function approvePayout(id){
-  var p = STATE.payoutRequests.find(function(x){return x.id===id;});
-  var flag = selfReferralFlag_(p.userId);
-  if(flag && !confirm('Possible self-referral: '+flag+'.\n\nApprove this '+p.type+' payout anyway?')) return;
-  p.status='paid';
-  STATE.notifications.push({id:uid('nt'),userId:p.userId,message:'Your payout of '+naira(p.amount)+' was approved.',read:false,createdAt:new Date().toISOString()});
-  sendMail(userEmail_(p.userId), 'Your payout of '+naira(p.amount)+' was approved', 'Your payout request of '+naira(p.amount)+' has been approved and is being processed.');
-  log('approve_payout', p.id);
-  save();
+  saveAction(function(){
+    var p = STATE.payoutRequests.find(function(x){return x.id===id;});
+    if(!p || p.status!=='pending'){ return false; } // already handled — nothing to do
+    var flag = selfReferralFlag_(p.userId);
+    if(flag && !confirm('Possible self-referral: '+flag+'.\n\nApprove this '+p.type+' payout anyway?')) return false;
+    p.status='paid';
+    STATE.notifications.push({id:uid('nt'),userId:p.userId,message:'Your payout of '+naira(p.amount)+' was approved.',read:false,createdAt:new Date().toISOString()});
+    sendMail(userEmail_(p.userId), 'Your payout of '+naira(p.amount)+' was approved', 'Your payout request of '+naira(p.amount)+' has been approved and is being processed.');
+    log('approve_payout', p.id);
+  });
 }
 function denyPayout(id){
-  var p=STATE.payoutRequests.find(function(x){return x.id===id;});
-  p.status='rejected';
-  sendMail(userEmail_(p.userId), 'Your payout request was denied', 'Your payout request of '+naira(p.amount)+' was reviewed and denied. Please open a support ticket if you have questions.');
-  save();
+  saveAction(function(){
+    var p=STATE.payoutRequests.find(function(x){return x.id===id;});
+    if(!p || p.status!=='pending'){ return false; } // already handled — nothing to do
+    p.status='rejected';
+    sendMail(userEmail_(p.userId), 'Your payout request was denied', 'Your payout request of '+naira(p.amount)+' was reviewed and denied. Please open a support ticket if you have questions.');
+    log('deny_payout', p.id);
+  });
 }
 
 // ---------- AFFILIATE / ACCOUNT LIFECYCLE ----------
@@ -749,7 +818,8 @@ function renderAffiliate(){
       '<td>Initial '+naira(a.startBalance)+' · Current '+naira(a.currentBalance)+'</td>'+
       '<td><button class="btn small" onclick="updateBalance(\''+a.id+'\')">Update Balance</button> '+
       '<button class="btn small warn" onclick="markClosed(\''+a.id+'\',\'failed\')">Failed</button> <button class="btn small danger" onclick="markClosed(\''+a.id+'\',\'breached\')">Breached</button> '+
-      '<button class="btn small" onclick="advanceStage(\''+a.id+'\')">Advance Stage</button></td></tr>';
+      '<button class="btn small" onclick="advanceStage(\''+a.id+'\')">Advance Stage</button> '+
+      '<button class="btn small ghost" onclick="adminTransferAccount(\''+a.id+'\')">Transfer</button></td></tr>';
   }).join('');
   return '<h2>Trader Accounts</h2><div class="card"><table><tr><th>User</th><th>Login</th><th>Category</th><th>Stage</th><th>Balance</th><th>Actions</th></tr>'+rows+'</table></div>';
 }
@@ -769,20 +839,43 @@ function setUserBookStage(userId, bookStage){
 function renderUsers(){
   var q = (window._userSearch||'').toLowerCase();
   var users = STATE.users.filter(function(u){
-    return !q || (u.email||'').toLowerCase().indexOf(q)!==-1 || (u.name||'').toLowerCase().indexOf(q)!==-1;
+    return !q || (u.email||'').toLowerCase().indexOf(q)!==-1 || (u.name||'').toLowerCase().indexOf(q)!==-1 || (u.phone||'').toLowerCase().indexOf(q)!==-1;
   });
+  var missingPhone = STATE.users.filter(function(u){return !u.phone;}).length;
+  // No auto-migration is possible here — unlike the MT5 pool, there's no other
+  // field in this app that reliably encodes a phone number, so it can't be
+  // inferred. Former users get a one-time prompt to add it themselves next
+  // time they log in (see the dashboard banner in App.html); this just flags
+  // who's still missing one, in case you already have it from KYC or a
+  // support ticket and want to enter it on their behalf.
+  var missingHtml = missingPhone ? '<div class="alert">'+missingPhone+' user(s) signed up before phone numbers were collected and have none on file. They\'ll be prompted to add it themselves next time they log in — or set it here if you already have it.</div>' : '';
   var rows = users.map(function(u){
     var bs = u.bookStage || 'bbook';
     var referredCount = STATE.users.filter(function(x){return x.referredBy===u.id;}).length;
     var accCount = STATE.traderAccounts.filter(function(a){return a.userId===u.id && a.status!=='closed';}).length;
     var bookSelect = '<select onchange="setUserBookStage(\''+u.id+'\',this.value)">'+STATE.bookStages.map(function(b){return '<option value="'+b.id+'"'+(b.id===bs?' selected':'')+'>'+b.name+'</option>';}).join('')+'</select>';
-    return '<tr><td>'+(u.name||'-')+'</td><td>'+(u.email||'-')+'</td><td>'+accCount+'</td><td>'+referredCount+'</td><td><span class="badge b-'+(u.kycStatus==='approved'?'confirmed':u.kycStatus==='pending'?'pending':'rejected')+'">'+u.kycStatus+'</span></td><td>'+bookSelect+'</td></tr>';
+    return '<tr><td>'+(u.name||'-')+'</td><td>'+(u.email||'-')+'</td>'+
+      '<td>'+(u.phone?u.phone:'<span style="color:var(--danger)">none</span>')+' <button class="btn small" onclick="editUserPhone(\''+u.id+'\')">'+(u.phone?'Edit':'Set')+'</button></td>'+
+      '<td>'+accCount+'</td><td>'+referredCount+'</td><td><span class="badge b-'+(u.kycStatus==='approved'?'confirmed':u.kycStatus==='pending'?'pending':'rejected')+'">'+u.kycStatus+'</span></td><td>'+bookSelect+'</td></tr>';
   }).join('');
-  return '<h2>Users</h2>'+
-    '<div class="card"><input placeholder="Search name or email" value="'+(window._userSearch||'')+'" oninput="window._userSearch=this.value;render()" style="max-width:260px"></div>'+
-    '<div class="card"><table><tr><th>Name</th><th>Email</th><th>Accounts</th><th>Referrals</th><th>KYC</th><th>Book Stage</th></tr>'+rows+'</table></div>';
+  return '<h2>Users</h2>'+missingHtml+
+    '<div class="card"><input placeholder="Search name, email, or phone" value="'+(window._userSearch||'')+'" oninput="window._userSearch=this.value;render()" style="max-width:260px"></div>'+
+    '<div class="card"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Accounts</th><th>Referrals</th><th>KYC</th><th>Book Stage</th></tr>'+rows+'</table></div>';
 }
-// ---------- ACCOUNT TRANSFERS (read-only — users initiate/accept these themselves) ----------
+function editUserPhone(id){
+  var u = STATE.users.find(function(x){return x.id===id;});
+  if(!u) return;
+  var phone = prompt('Phone number for '+(u.name||u.email||u.id), u.phone||'');
+  if(phone===null) return;
+  phone = phone.trim();
+  saveAction(function(){
+    var user = STATE.users.find(function(x){return x.id===id;});
+    if(!user) return false;
+    user.phone = phone;
+    log('set_user_phone', (user.email||user.id)+' -> '+(phone||'(cleared)'));
+  });
+}
+// ---------- ACCOUNT TRANSFERS (log of user-to-user transfers + admin overrides) ----------
 function renderTransfers(){
   var list = (STATE.accountTransfers||[]).slice().reverse();
   var rows = list.map(function(t){
@@ -793,12 +886,12 @@ function renderTransfers(){
     return '<tr><td>'+(t.accountCategory||'-')+(acc?' ('+acc.login+')':' (deleted)')+'</td>'+
       '<td>'+(from?(from.name+'<br><span class="muted">'+from.email+'</span>'):'-')+'</td>'+
       '<td>'+(to?(to.name+'<br><span class="muted">'+to.email+'</span>'):'-')+'</td>'+
-      '<td><span class="badge '+statusClass+'">'+t.status+'</span></td>'+
+      '<td><span class="badge '+statusClass+'">'+t.status+'</span>'+(t.initiatedBy==='admin'?' <span class="badge b-pending">admin</span>':'')+'</td>'+
       '<td>'+new Date(t.createdAt).toLocaleString()+'</td>'+
       '<td>'+(t.respondedAt? new Date(t.respondedAt).toLocaleString() : '-')+'</td></tr>';
   }).join('');
   return '<h2>Account Transfers</h2>'+
-    '<div class="card muted">Users transfer trading accounts to each other directly — instant on acceptance, no fee, no approval needed. This is a read-only log for fraud monitoring and dispute resolution.</div>'+
+    '<div class="card muted">Users can transfer trading accounts to each other directly (instant on acceptance, no fee, no approval needed). Admin can also force-transfer any account straight to any email from the Trader Accounts table — this works even if that email isn\'t registered yet, in which case a new account is created for it automatically. This log covers both, for fraud monitoring and dispute resolution.</div>'+
     '<div class="card"><table><tr><th>Account</th><th>From</th><th>To</th><th>Status</th><th>Requested</th><th>Responded</th></tr>'+
     (rows||'<tr><td colspan="6" class="muted" style="text-align:center">No transfers yet</td></tr>')+'</table></div>';
 }
@@ -825,6 +918,47 @@ function updateBalance(id){
   a.startBalance=initBal; a.currentBalance=bal; a.equity=eq;
   a.balanceHistory.push({date:new Date().toISOString(),balance:bal,equity:eq});
   save();
+}
+// Admin override: force-move a trader account to ANY email, unlike the user-to-user
+// transfer flow in App.html (which requires the recipient to already be registered
+// and to accept the request). Here admin can target an email that has no account
+// yet — in that case a new minimal user record is created on the spot (with a
+// random temp password) so the account has somewhere to land immediately.
+function adminTransferAccount(accountId){
+  var acc = STATE.traderAccounts.find(function(a){return a.id===accountId;});
+  if(!acc) return alert('Account not found.');
+  var owner = STATE.users.find(function(u){return u.id===acc.userId;});
+  var email = prompt('Transfer this '+acc.category+' account (login '+acc.login+') to which email?'+(owner?'\nCurrently owned by '+(owner.email||owner.name||owner.id):''));
+  if(!email) return;
+  email = email.trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert('Enter a valid email address.');
+  if(owner && (owner.email||'').toLowerCase()===email) return alert('That account is already owned by this email.');
+  var recipient = STATE.users.find(function(u){return (u.email||'').toLowerCase()===email;});
+  var isNewUser = false, tempPassword = null;
+  if(!recipient){
+    if(!confirm('No registered user has this email yet.\n\nCreate a new account for '+email+' and transfer this account to it?')) return;
+    isNewUser = true;
+    tempPassword = Math.random().toString(36).slice(2,10);
+    recipient = {id:uid('u'),name:email.split('@')[0],email:email,phone:'',password:tempPassword,avatarUrl:'',referralCode:uid('ref').slice(0,10),referredBy:null,affiliateEarnings:0,kycStatus:'none',kycCountry:'',kycIdNumber:'',bookStage:'bbook',createdAt:new Date().toISOString()};
+  } else if(!confirm('Transfer the '+acc.category+' account (login '+acc.login+') to '+email+'?')){
+    return;
+  }
+  saveAction(function(){
+    var a = STATE.traderAccounts.find(function(x){return x.id===accountId;});
+    if(!a) { alert('Account no longer exists.'); return false; }
+    var fromUserId = a.userId;
+    if(isNewUser) STATE.users.push(recipient);
+    a.userId = recipient.id;
+    if(!STATE.accountTransfers) STATE.accountTransfers = [];
+    STATE.accountTransfers.push({id:uid('tr'),accountId:a.id,accountCategory:a.category,fromUserId:fromUserId,toUserId:recipient.id,status:'accepted',createdAt:new Date().toISOString(),respondedAt:new Date().toISOString(),initiatedBy:'admin'});
+    if(fromUserId){
+      STATE.notifications.push({id:uid('nt'),userId:fromUserId,message:'Your '+a.category+' account (login '+a.login+') was transferred to '+email+' by an admin.',read:false,createdAt:new Date().toISOString()});
+      sendMail(userEmail_(fromUserId), 'Account transferred', 'Your '+a.category+' account (login '+a.login+') has been transferred to '+email+' by an admin.');
+    }
+    STATE.notifications.push({id:uid('nt'),userId:recipient.id,message:'A '+a.category+' account (login '+a.login+') was transferred to you by an admin.',read:false,createdAt:new Date().toISOString()});
+    sendMail(recipient.email, 'An account was transferred to you', 'A '+a.category+' account (login '+a.login+') has been transferred to you by an admin.'+(isNewUser?' A new Now Funded account was created for you — email: '+email+', temporary password: '+tempPassword+'. Please log in and change your password as soon as possible.':''));
+    log('admin_transfer_account', a.login+' -> '+email+(isNewUser?' (new user created)':''));
+  }, function(){ alert('Account transferred to '+email+(isNewUser?' (new user account created).':'.')); });
 }
 
 // ---------- CONTENT (testimonials, faqs) ----------
@@ -1063,14 +1197,22 @@ function addToolkitItem(){
   var url = document.getElementById('promo_url').value.trim();
   if(!url) return alert('Paste an image URL first');
   var caption = document.getElementById('promo_caption').value.trim();
-  if(!STATE.settings.affiliateToolkit) STATE.settings.affiliateToolkit = [];
-  STATE.settings.affiliateToolkit.push({id:uid('pr'), url:url, caption:caption});
-  log('add_promo', caption||url);
-  save();
+  saveAction(function(){
+    if(!STATE.settings.affiliateToolkit) STATE.settings.affiliateToolkit = [];
+    STATE.settings.affiliateToolkit.push({id:uid('pr'), url:url, caption:caption});
+    log('add_promo', caption||url);
+  }, function(){
+    document.getElementById('promo_url').value = '';
+    document.getElementById('promo_caption').value = '';
+  });
 }
 function removeToolkitItem(id){
-  STATE.settings.affiliateToolkit = STATE.settings.affiliateToolkit.filter(function(t){return t.id!==id;});
-  save();
+  if(!confirm('Remove this graphic? It will disappear from every affiliate\'s Toolkit tab immediately.')) return;
+  saveAction(function(){
+    var item = (STATE.settings.affiliateToolkit||[]).find(function(t){return t.id===id;});
+    STATE.settings.affiliateToolkit = (STATE.settings.affiliateToolkit||[]).filter(function(t){return t.id!==id;});
+    log('remove_promo', item ? (item.caption||item.url) : id);
+  });
 }
 
 // ---------- DATABASE (clear / raw edit) ----------

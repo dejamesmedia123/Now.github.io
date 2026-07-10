@@ -155,6 +155,30 @@
   .ticket-row:hover{border-color:var(--accent)}
   .ms-bar{background:var(--panel2);border-radius:8px;height:6px;overflow:hidden;margin-top:8px}
   .ms-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  /* ---- affiliate: referral ledger (distinct from the pill-tab pattern above) ---- */
+  .aff-tabs{display:flex;gap:18px;overflow-x:auto;border-bottom:1px solid var(--line);margin-bottom:16px}
+  .aff-tab{flex:0 0 auto;padding:8px 1px 10px;color:var(--muted);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s}
+  .aff-tab.active{color:var(--text);border-bottom-color:var(--accent)}
+  .aff-flow{display:flex;border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;margin-bottom:14px}
+  .aff-flow-seg{flex:1;padding:14px 8px;text-align:center;position:relative;min-width:0}
+  .aff-flow-seg:not(:last-child)::after{content:'';position:absolute;right:0;top:22%;bottom:22%;width:1px;background:var(--line)}
+  .aff-flow-seg .n{font-size:18px;font-weight:800;white-space:nowrap}
+  .aff-flow-seg .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-top:2px}
+  .ladder{display:flex;align-items:flex-end;gap:6px;height:110px;margin:16px 0 8px;padding:0 2px}
+  .ladder-rung{flex:1;border-radius:6px 6px 0 0;background:var(--panel2);display:flex;align-items:flex-start;justify-content:center;padding-top:6px;transition:height .3s}
+  .ladder-rung.reached{background:linear-gradient(180deg,var(--accent2),var(--accent))}
+  .ladder-rung.current{box-shadow:0 0 0 2px var(--text) inset}
+  .ladder-rung .pct{font-size:11px;font-weight:800;color:var(--btn-text)}
+  .ladder-rung .pct.dim{color:var(--muted)}
+  .ladder-labels{display:flex;gap:6px;padding:0 2px}
+  .ladder-labels div{flex:1;text-align:center;font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .toolkit-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .toolkit-item{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+  .toolkit-item img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+  .toolkit-item button{width:100%;border:none;border-top:1px solid var(--line);background:transparent;color:var(--text);padding:8px;font-size:12px;font-weight:700;cursor:pointer}
+  .toolkit-item button:hover{background:var(--panel2)}
+  .ref-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)}
+  .ref-row:last-child{border-bottom:none}
   .pw-meter{height:5px;border-radius:3px;background:var(--panel2);overflow:hidden;margin:-4px 0 10px}
   .pw-meter i{display:block;height:100%;width:0%;transition:width .2s,background .2s}
   .skeleton{background:linear-gradient(90deg,var(--panel) 25%,var(--panel2) 50%,var(--panel) 75%);background-size:200% 100%;animation:shimmer 1.3s infinite;border-radius:var(--radius);height:80px;margin-bottom:14px}
@@ -427,6 +451,45 @@ function save(cb){
           knownVersion = STATE._version || 0;
           renderNav(); route();
           alert('Something went wrong saving. The page has been refreshed — please try again.');
+        });
+      }
+      delete STATE._expectedVersion;
+      if(res && typeof res.version === 'number') knownVersion = res.version;
+      if(cb) cb();
+    })
+    .catch(function(err){ delete STATE._expectedVersion; alert('Save failed: '+err); });
+}
+// ---- AUTO-RETRYING SAVE (for narrow, self-contained actions) ----
+// Use this instead of save() for actions that just look up a record by id and
+// mutate it (confirm payment, request payout, accept/decline transfer, etc).
+// On a version conflict, the write never persisted server-side — there's
+// nothing of ours to lose — so we silently refetch the latest data and re-run
+// the SAME action closure against it, rather than bothering the person with
+// "please try again". This only works because actionFn re-looks-up everything
+// it needs from the live STATE each time it runs, instead of closing over
+// stale references. actionFn can return false to abort (e.g. a real
+// precondition failed and it already showed its own message/alert); anything
+// else proceeds to save.
+var SAVE_ACTION_MAX_RETRIES = 3;
+function saveAction(actionFn, cb, attempt){
+  attempt = attempt || 0;
+  if(actionFn() === false){ return; }
+  STATE._expectedVersion = knownVersion;
+  fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(STATE) })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(res && res.conflict){
+        delete STATE._expectedVersion;
+        return fetch(WEBAPP_URL + '?action=read').then(function(r){ return r.json(); }).then(function(data){
+          STATE = (typeof data === 'string') ? JSON.parse(data) : data;
+          knownVersion = STATE._version || 0;
+          if(attempt >= SAVE_ACTION_MAX_RETRIES){
+            // Real hot contention (rare) — give up retrying quietly and say so.
+            renderNav(); route();
+            alert('Something went wrong saving. The page has been refreshed — please try again.');
+            return;
+          }
+          saveAction(actionFn, cb, attempt+1);
         });
       }
       delete STATE._expectedVersion;
@@ -906,6 +969,7 @@ function renderSignup(){
   }).join('');
   return '<div class="card" style="max-width:380px;margin:0 auto"><h2>Sign Up</h2><div id="msg"></div>'+
     '<label>Name</label><input id="su_name"><label>Email</label><input id="su_email">'+
+    '<label>Phone Number</label><input id="su_phone" type="tel" placeholder="e.g. +234 801 234 5678">'+
     '<label>Password</label><input id="su_pass" type="password" oninput="updatePwMeter()">'+
     '<div class="pw-meter"><i id="pwbar"></i></div>'+
     '<label>Profile icon <span class="muted" style="font-weight:400">(optional — you can change this anytime)</span></label>'+
@@ -933,8 +997,10 @@ function updatePwMeter(){
 function doSignup(){
   var name=document.getElementById('su_name').value.trim();
   var email=document.getElementById('su_email').value.trim().toLowerCase();
+  var phone=document.getElementById('su_phone').value.trim();
   var pass=document.getElementById('su_pass').value;
-  if(!name||!email||!pass) return msg('Fill all fields','err');
+  if(!name||!email||!phone||!pass) return msg('Fill all fields','err');
+  if(!/^[0-9+()\-\s]{7,20}$/.test(phone)) return msg('Enter a valid phone number','err');
   if(STATE.users.find(function(u){return u.email===email;})) return msg('Email already registered','err');
   var refCode = getRefFromUrl();
   // Weak, device-level self-referral guard: if this browser already created an
@@ -947,7 +1013,7 @@ function doSignup(){
   var referredBy = refCode ? (STATE.users.find(function(u){return u.referralCode===refCode;})||{}).id : null;
   var lib = (STATE.settings.avatarLibrary && STATE.settings.avatarLibrary.length) ? STATE.settings.avatarLibrary : DEFAULT_AVATARS;
   var chosenAvatar = lib.find(function(a){return a.id===suAvatar;});
-  var u = {id:uid('u'),name:name,email:email,password:pass,avatarUrl:(chosenAvatar?chosenAvatar.url:''),referralCode:uid('ref').slice(0,10),referredBy:referredBy||null,affiliateEarnings:0,
+  var u = {id:uid('u'),name:name,email:email,phone:phone,password:pass,avatarUrl:(chosenAvatar?chosenAvatar.url:''),referralCode:uid('ref').slice(0,10),referredBy:referredBy||null,affiliateEarnings:0,
     kycStatus:'none',kycCountry:'',kycIdNumber:'',bookStage:'bbook',createdAt:new Date().toISOString()};
   STATE.users.push(u);
   currentUserId = u.id;
@@ -1065,6 +1131,13 @@ function renderDashboard(){
       return '<img src="'+a.url+'" onclick="lockRun(this,function(){updateAvatar(\''+a.id+'\');})" style="width:52px;height:52px;border-radius:50%;object-fit:cover;cursor:pointer;margin:4px;border:2px solid '+(me.avatarUrl===a.url?'var(--accent)':'transparent')+'">';
     }).join('')+'</div>';
   var u = currentUser();
+  var phoneBanner = '';
+  if(!u.phone){
+    phoneBanner = '<div class="card" style="border-left:3px solid var(--accent)">'+
+      '<div class="row"><b><i data-lucide="phone" style="width:16px;height:16px;vertical-align:-3px;color:var(--accent)"></i> Add Your Phone Number</b></div>'+
+      '<div class="muted" style="margin:4px 0 8px">We didn\'t collect this when you signed up — add it so we can reach you about your orders and payouts.</div>'+
+      '<div class="row"><input id="dash_phone" type="tel" placeholder="e.g. +234 801 234 5678" style="flex:1"><button class="btn small" onclick="lockRun(this,submitPhone)">Save</button></div></div>';
+  }
   var kycBanner = '';
   if(u.kycStatus!=='approved'){
     kycBanner = '<div class="card" style="border-left:3px solid var(--gold);background:linear-gradient(90deg,rgba(245,185,66,.1),transparent)">'+
@@ -1130,7 +1203,7 @@ function renderDashboard(){
     '<img id="kyc_nin_preview" style="display:none;width:72px;height:72px;object-fit:cover;border-radius:10px;margin:6px 0;border:1px solid var(--line)">'+
     '<div class="muted" style="margin:6px 0">.    .</div>'+
     '<button class="btn small" onclick="lockRun(this,submitKyc)">Submit for Review</button>')+'</div>';
-  return header+kycBanner+bookStageCard+statsRow+quickActions+renderTransfersSection_()+'<h4>Your Accounts</h4>'+accHtml+(ordHtml?'<h4>Orders</h4><div class="card">'+ordHtml+'</div>':'')+'<h4>Verification</h4>'+kycHtml;
+  return header+phoneBanner+kycBanner+bookStageCard+statsRow+quickActions+renderTransfersSection_()+'<h4>Your Accounts</h4>'+accHtml+(ordHtml?'<h4>Orders</h4><div class="card">'+ordHtml+'</div>':'')+'<h4>Verification</h4>'+kycHtml;
 }
 // Reads a locally-selected file and shows it as a preview thumbnail. The
 // resulting data URL lives only in this <img> element's src attribute in the
@@ -1151,6 +1224,18 @@ function submitKyc(){
   u.kycStatus = 'pending';
   sendMail(adminEmail_(), 'New KYC submission', 'User '+(u.email||u.name||u.id)+' submitted KYC details for review (country: '+u.kycCountry+').');
   save(function(){ toast('Submitted for review'); render(); });
+}
+// Lets existing users (who signed up before phone numbers were collected) add
+// one from the "Add Your Phone Number" dashboard banner.
+function submitPhone(){
+  var phoneEl = document.getElementById('dash_phone');
+  var phone = phoneEl ? phoneEl.value.trim() : '';
+  if(!/^[0-9+()\-\s]{7,20}$/.test(phone)) return toast('Enter a valid phone number');
+  saveAction(function(){
+    var u = currentUser();
+    if(!u) return false;
+    u.phone = phone;
+  }, function(){ toast('Phone number saved'); render(); });
 }
 function toggleAvatarPicker(){
   var p = document.getElementById('dashAvatarPicker');
@@ -1266,30 +1351,41 @@ function initiateTransfer(accountId){
   save(function(){ toast('Transfer request sent to '+email); render(); });
 }
 function acceptTransfer(transferId){
-  var t = STATE.accountTransfers.find(function(x){return x.id===transferId;});
-  if(!t || t.status!=='pending' || t.toUserId!==currentUserId) return;
-  var acc = STATE.traderAccounts.find(function(a){return a.id===t.accountId;});
-  if(!acc){ t.status='declined'; t.respondedAt=new Date().toISOString(); save(function(){render();}); return alert('That account no longer exists.'); }
-  acc.userId = currentUserId;
-  t.status = 'accepted';
-  t.respondedAt = new Date().toISOString();
-  notify(t.fromUserId, currentUser().name+' accepted your transfer of the '+t.accountCategory+' account.');
-  save(function(){ toast('Account transferred to you'); render(); });
+  saveAction(function(){
+    var t = STATE.accountTransfers.find(function(x){return x.id===transferId;});
+    if(!t || t.status!=='pending' || t.toUserId!==currentUserId) return false;
+    var acc = STATE.traderAccounts.find(function(a){return a.id===t.accountId;});
+    if(!acc){
+      t.status='declined'; t.respondedAt=new Date().toISOString();
+      // still a real state change (declining a now-dead transfer), so fall through to save
+    } else {
+      acc.userId = currentUserId;
+      t.status = 'accepted';
+      t.respondedAt = new Date().toISOString();
+      notify(t.fromUserId, currentUser().name+' accepted your transfer of the '+t.accountCategory+' account.');
+    }
+  }, function(){
+    var t = STATE.accountTransfers.find(function(x){return x.id===transferId;});
+    if(t && t.status==='declined'){ render(); alert('That account no longer exists.'); }
+    else { toast('Account transferred to you'); render(); }
+  });
 }
 function declineTransfer(transferId){
-  var t = STATE.accountTransfers.find(function(x){return x.id===transferId;});
-  if(!t || t.status!=='pending' || t.toUserId!==currentUserId) return;
-  t.status = 'declined';
-  t.respondedAt = new Date().toISOString();
-  notify(t.fromUserId, currentUser().name+' declined your transfer of the '+t.accountCategory+' account.');
-  save(function(){ toast('Transfer declined'); render(); });
+  saveAction(function(){
+    var t = STATE.accountTransfers.find(function(x){return x.id===transferId;});
+    if(!t || t.status!=='pending' || t.toUserId!==currentUserId) return false;
+    t.status = 'declined';
+    t.respondedAt = new Date().toISOString();
+    notify(t.fromUserId, currentUser().name+' declined your transfer of the '+t.accountCategory+' account.');
+  }, function(){ toast('Transfer declined'); render(); });
 }
 function cancelTransfer(transferId){
-  var t = STATE.accountTransfers.find(function(x){return x.id===transferId;});
-  if(!t || t.status!=='pending' || t.fromUserId!==currentUserId) return;
-  t.status = 'cancelled';
-  t.respondedAt = new Date().toISOString();
-  save(function(){ toast('Transfer request cancelled'); render(); });
+  saveAction(function(){
+    var t = STATE.accountTransfers.find(function(x){return x.id===transferId;});
+    if(!t || t.status!=='pending' || t.fromUserId!==currentUserId) return false;
+    t.status = 'cancelled';
+    t.respondedAt = new Date().toISOString();
+  }, function(){ toast('Transfer request cancelled'); render(); });
 }
 function renderTransfersSection_(){
   var incoming = STATE.accountTransfers.filter(function(t){return t.toUserId===currentUserId && t.status==='pending';});
@@ -1547,7 +1643,8 @@ function cancelCheckout(){ checkoutStep=1; ackRules=[false,false,false]; go('das
 // same effect as an admin clicking "Confirm" in admin.html, just automatic).
 // flutterwave.gs is a separate Apps Script deployment; it never writes to
 // nnnn.json, so a bug there cannot corrupt orders/users data — this file still
-// does the one and only save().
+// does the one and only save (via saveAction, so a version conflict here is
+// retried automatically rather than leaving a paid order stuck).
 function flwConfig_(){
   var s = (STATE.settings && STATE.settings.flutterwave) || {};
   return {
@@ -1598,18 +1695,24 @@ function initiateFlutterwavePayment(){
   });
 }
 function completeFlutterwaveOrder_(plan, calc, txRef, flwRef){
-  var codes = [];
-  var orders = [];
-  for(var i=0;i<checkoutQty;i++){
-    var order = {id:uid('o'),orderCode:uid('NF').toUpperCase().slice(0,8),userId:currentUserId,planId:plan.id,amount:calc.unit,discountCode:calc.usedDiscountCode,status:'pending',createdAt:new Date().toISOString(),paymentMethod:'flutterwave',flwTxRef:txRef,flwRef:flwRef};
-    STATE.orders.push(order);
-    orders.push(order);
-    codes.push(order.orderCode);
-  }
-  orders.forEach(function(order){ autoConfirmOrder_(order); });
-  lastOrderCodes = codes;
-  lastOrdersAllConfirmed = orders.every(function(o){ return o.status==='confirmed'; });
-  save(function(){ checkoutStep=5; ackRules=[false,false,false]; render(); });
+  var qty = checkoutQty; // freeze now — this is the payment path, don't let a later UI change leak in on retry
+  var result = { codes: [], allConfirmed: true };
+  saveAction(function(){
+    result.codes = [];
+    var orders = [];
+    for(var i=0;i<qty;i++){
+      var order = {id:uid('o'),orderCode:uid('NF').toUpperCase().slice(0,8),userId:currentUserId,planId:plan.id,amount:calc.unit,discountCode:calc.usedDiscountCode,status:'pending',createdAt:new Date().toISOString(),paymentMethod:'flutterwave',flwTxRef:txRef,flwRef:flwRef};
+      STATE.orders.push(order);
+      orders.push(order);
+      result.codes.push(order.orderCode);
+    }
+    orders.forEach(function(order){ autoConfirmOrder_(order); });
+    result.allConfirmed = orders.every(function(o){ return o.status==='confirmed'; });
+  }, function(){
+    lastOrderCodes = result.codes;
+    lastOrdersAllConfirmed = result.allConfirmed;
+    checkoutStep=5; ackRules=[false,false,false]; render();
+  });
 }
 // Mirrors admin.html's confirmOrder() — same MT5 assignment, trader account
 // creation, affiliate crediting, and notifications an admin would trigger by
@@ -1775,6 +1878,7 @@ function submitPayout(){
   var accName=document.getElementById('po_accname').value.trim();
   var bank = bankName+' · '+accNo+' · '+accName;
   var uid_ = currentUserId;
+  var saveBank = document.getElementById('po_save')&&document.getElementById('po_save').checked;
   // Re-fetch fresh state right before writing — STATE in memory may be stale (loaded at
   // page boot, or sitting on the review screen for a while), and this is the point money
   // actually gets reserved. Re-validating against fresh data closes most of the window
@@ -1785,22 +1889,22 @@ function submitPayout(){
     STATE.payoutRequests = fresh.payoutRequests || [];
     STATE.traderAccounts = fresh.traderAccounts || [];
     STATE.users = fresh.users || [];
-    var u = currentUser();
-    if(!u) return msg('Session expired — please log in again.','err');
-    if(u.kycStatus!=='approved') return msg('Complete identity verification before requesting a payout.','err');
-    if(type==='trader'){
-      var ps = fundedProfitShare_(uid_);
-      if(amount > ps.available) return msg('Amount exceeds your available profit share of '+naira(ps.available)+' (this may have changed).','err');
-    } else {
-      var affAvail = affiliateAvailable_(uid_);
-      if(amount > affAvail) return msg('Amount exceeds your available affiliate earnings of '+naira(affAvail)+' (this may have changed).','err');
-    }
-    if(document.getElementById('po_save')&&document.getElementById('po_save').checked){
-      u.savedBankDetails = {bankName:bankName, accNo:accNo, accName:accName};
-    }
-    STATE.payoutRequests.push({id:uid('po'),userId:uid_,type:type,amount:amount,bankDetails:bank,status:'pending',createdAt:new Date().toISOString()});
-    sendMail(adminEmail_(), 'New payout request', 'User '+(u.email||u.name||uid_)+' requested a '+type+' payout of '+naira(amount)+'.');
-    save(function(){ msg('Payout request submitted.','ok'); render(); });
+    knownVersion = fresh._version || 0; // keep this in sync with the fresh read above — leaving it stale here used to guarantee a spurious version conflict on the write below
+    saveAction(function(){
+      var u = currentUser();
+      if(!u){ msg('Session expired — please log in again.','err'); return false; }
+      if(u.kycStatus!=='approved'){ msg('Complete identity verification before requesting a payout.','err'); return false; }
+      if(type==='trader'){
+        var ps = fundedProfitShare_(uid_);
+        if(amount > ps.available){ msg('Amount exceeds your available profit share of '+naira(ps.available)+' (this may have changed).','err'); return false; }
+      } else {
+        var affAvail = affiliateAvailable_(uid_);
+        if(amount > affAvail){ msg('Amount exceeds your available affiliate earnings of '+naira(affAvail)+' (this may have changed).','err'); return false; }
+      }
+      if(saveBank){ u.savedBankDetails = {bankName:bankName, accNo:accNo, accName:accName}; }
+      STATE.payoutRequests.push({id:uid('po'),userId:uid_,type:type,amount:amount,bankDetails:bank,status:'pending',createdAt:new Date().toISOString()});
+      sendMail(adminEmail_(), 'New payout request', 'User '+(u.email||u.name||uid_)+' requested a '+type+' payout of '+naira(amount)+'.');
+    }, function(){ msg('Payout request submitted.','ok'); render(); });
   }).catch(function(err){ msg('Could not verify your balance — please try again.','err'); });
 }
 
@@ -1827,19 +1931,20 @@ function renderAffiliate(){
   var converted = affReferredConverted_(u);
   var rate = referred.length ? (converted/referred.length*100) : 0;
   var tierInfo = affCurrentTier_(u);
-  var tabs = ['dashboard','milestones','links','referrals','earnings'];
-  if((STATE.settings.affiliateToolkit||[]).length) tabs.push('toolkit');
+  // Toolkit always has a tab — an empty state explains it when no graphics are
+  // uploaded yet, rather than the tab silently disappearing.
+  var tabs = ['dashboard','milestones','links','referrals','earnings','toolkit'];
   var tabLabels = {dashboard:'Dashboard',milestones:'Milestones',links:'My Links',referrals:'Referrals',earnings:'Earnings',toolkit:'Toolkit'};
   var header = '<div class="row" style="align-items:center"><h2 style="margin:0">Affiliate</h2>'+
-    '<button class="btn small" onclick="go(\'payout\')">Cash Out</button></div>'+
+    '<button class="btn small" onclick="go(\'payout\')">Cash Out '+naira(affiliateAvailable_(u.id))+'</button></div>'+
     '<div class="row" style="gap:6px;margin:6px 0 14px"><span class="badge b-active">'+tierInfo.current.name+'</span><span class="muted">'+tierInfo.current.commissionPct+'% commission</span></div>'+
-    '<div class="grid" style="margin-bottom:14px">'+
-    '<div class="stat-mini" style="border-left:3px solid var(--accent)"><div class="lbl">Total Earnings</div><div class="val">'+naira(u.affiliateEarnings||0)+'</div></div>'+
-    '<div class="stat-mini" style="border-left:3px solid var(--accent2)"><div class="lbl">Available</div><div class="val">'+naira(affiliateAvailable_(u.id))+'</div></div>'+
-    '<div class="stat-mini" style="border-left:3px solid var(--gold)"><div class="lbl">Conversions</div><div class="val">'+converted+'</div><div class="muted" style="font-size:11px">'+rate.toFixed(1)+'% rate</div></div>'+
-    '<div class="stat-mini" style="border-left:3px solid var(--success)"><div class="lbl">Revenue</div><div class="val">'+naira(revenue)+'</div></div>'+
+    '<div class="aff-flow">'+
+      '<div class="aff-flow-seg"><div class="n">'+referred.length+'</div><div class="l">Referred</div></div>'+
+      '<div class="aff-flow-seg"><div class="n">'+converted+'</div><div class="l">Converted'+(referred.length?' · '+rate.toFixed(0)+'%':'')+'</div></div>'+
+      '<div class="aff-flow-seg"><div class="n">'+naira(revenue)+'</div><div class="l">Revenue Driven</div></div>'+
+      '<div class="aff-flow-seg"><div class="n" style="color:var(--accent)">'+naira(u.affiliateEarnings||0)+'</div><div class="l">You Earned</div></div>'+
     '</div>'+
-    '<div class="pills">'+tabs.map(function(t){return '<div class="pill '+(affTab===t?'active':'')+'" onclick="affTab=\''+t+'\';render()">'+tabLabels[t]+'</div>';}).join('')+'</div>';
+    '<div class="aff-tabs">'+tabs.map(function(t){return '<div class="aff-tab '+(affTab===t?'active':'')+'" onclick="affTab=\''+t+'\';render()">'+tabLabels[t]+'</div>';}).join('')+'</div>';
   var body = '';
   if(affTab==='dashboard') body = renderAffDashboard_(u, tierInfo, referred);
   else if(affTab==='milestones') body = renderAffMilestones_(tierInfo);
@@ -1850,21 +1955,33 @@ function renderAffiliate(){
   return header + body;
 }
 function renderAffDashboard_(u, tierInfo, referred){
-  var pct = tierInfo.next ? Math.min(100, (tierInfo.converted/tierInfo.next.minReferrals*100)) : 100;
-  return '<div class="card"><div class="row"><b>'+tierInfo.current.name+'</b>'+(tierInfo.next?'<span class="muted">'+Math.max(0,tierInfo.next.minReferrals-tierInfo.converted)+' more to '+tierInfo.next.name+'</span>':'<span class="muted">Top tier reached</span>')+'</div>'+
-    (tierInfo.next? '<div class="ms-bar"><i style="width:'+pct+'%"></i></div><div class="muted" style="font-size:12px;margin-top:4px">'+tierInfo.converted+' / '+tierInfo.next.minReferrals+' converted referrals</div>':'')+'</div>'+
-    '<div class="card"><div class="kv">Referrals get '+STATE.settings.affiliateDiscountRate+'% off automatically. You earn '+tierInfo.current.commissionPct+'% commission when their order is confirmed.</div>'+
-    '<div class="kv">Total referred users: <b>'+referred.length+'</b></div></div>';
+  var remaining = tierInfo.next ? Math.max(0, tierInfo.next.minReferrals-tierInfo.converted) : 0;
+  return '<div class="card">'+
+    (tierInfo.next ?
+      '<div class="row"><b>Next: '+tierInfo.next.name+'</b><span class="muted">'+remaining+' more converted referral'+(remaining===1?'':'s')+'</span></div>'+
+      '<div class="muted" style="font-size:12px;margin-top:2px">Reaching it raises your commission to '+tierInfo.next.commissionPct+'%.</div>'
+      : '<div class="row"><b>Top Tier Reached</b><i data-lucide="crown" style="width:16px;height:16px;color:var(--gold)"></i></div><div class="muted" style="font-size:12px;margin-top:2px">You\'re earning the maximum commission rate.</div>')+
+    '<button class="btn ghost" style="width:100%;margin-top:10px" onclick="affTab=\'milestones\';render()">View Commission Ladder</button></div>'+
+    '<div class="card"><div class="kv">Referrals get <b>'+STATE.settings.affiliateDiscountRate+'% off</b> automatically at checkout.</div>'+
+    '<div class="kv">You earn <b>'+tierInfo.current.commissionPct+'%</b> commission the moment their order is confirmed.</div>'+
+    '<div class="kv">Total referred: <b>'+referred.length+'</b></div></div>';
 }
 function renderAffMilestones_(tierInfo){
-  return tierInfo.tiers.map(function(t,i){
+  var tiers = tierInfo.tiers;
+  var rungs = tiers.map(function(t,i){
+    var reached = t.minReferrals <= tierInfo.converted;
     var isCurrent = t.id===tierInfo.current.id;
-    var isLocked = t.minReferrals > tierInfo.converted;
-    return '<div class="tier-row '+(isCurrent?'current':'')+'"><div class="tier-icon '+(isLocked?'locked':'')+'"><i data-lucide="'+(isLocked?'lock':'award')+'" style="width:18px;height:18px"></i></div>'+
-      '<div style="flex:1"><div class="row"><b>'+t.name+'</b>'+(isCurrent?'<span class="badge b-active">CURRENT</span>':'')+'</div>'+
-      '<div class="muted" style="font-size:12px">'+(i===0?'Start here':t.minReferrals+' converted referrals')+' · '+t.commissionPct+'% commission</div></div></div>';
-  }).join('') + '<div class="card" style="text-align:center"><i data-lucide="trophy" style="width:28px;height:28px;color:var(--muted)"></i><div style="font-weight:700;margin-top:8px">Ready to Level Up?</div><div class="muted" style="margin-top:4px">Every converted referral brings you closer to the next milestone.</div>'+
-    '<button class="btn" style="width:100%;margin-top:10px" onclick="affTab=\'links\';render()">Copy Your Link</button></div>';
+    var heightPct = tiers.length>1 ? (28 + (i/(tiers.length-1))*72) : 70;
+    return '<div class="ladder-rung '+(reached?'reached':'')+' '+(isCurrent?'current':'')+'" style="height:'+heightPct+'%" title="'+t.name+' — '+t.minReferrals+' converted referrals">'+
+      '<div class="pct'+(reached?'':' dim')+'">'+t.commissionPct+'%</div></div>';
+  }).join('');
+  var labels = tiers.map(function(t){return '<div>'+t.name+'</div>';}).join('');
+  return '<div class="card"><div class="row"><b>Commission Ladder</b><span class="muted">'+tierInfo.converted+' converted referral'+(tierInfo.converted===1?'':'s')+' so far</span></div>'+
+    '<div class="ladder">'+rungs+'</div><div class="ladder-labels">'+labels+'</div></div>'+
+    '<div class="card" style="text-align:center"><i data-lucide="trending-up" style="width:26px;height:26px;color:var(--accent)"></i>'+
+    '<div style="font-weight:700;margin-top:8px">Every converted referral moves you up a rung</div>'+
+    '<div class="muted" style="margin-top:4px;font-size:13px">Your commission rate only goes up — it never resets.</div>'+
+    '<button class="btn" style="width:100%;margin-top:10px" onclick="affTab=\'links\';render()">Share Your Link</button></div>';
 }
 function renderAffLinks_(u){
   var link = window.location.href.split('?')[0] + '?ref=' + u.referralCode;
@@ -1887,37 +2004,60 @@ function shareVia(platform){
 function renderAffReferrals_(referred){
   var rows = referred.slice().reverse().map(function(r){
     var spent = STATE.orders.filter(function(o){return o.userId===r.id && o.status==='confirmed';}).reduce(function(s,o){return s+o.amount;},0);
-    return '<div class="card"><div class="row"><b>'+r.name+'</b><span class="badge '+(spent>0?'b-active':'b-pending')+'">'+(spent>0?'converted':'registered')+'</span></div>'+
-      '<div class="muted" style="font-size:12px">'+new Date(r.createdAt).toLocaleDateString()+'</div>'+
-      '<div class="kv" style="margin-top:6px">Total Spent <b>'+naira(spent)+'</b></div></div>';
+    return '<div class="ref-row"><div><b>'+r.name+'</b><div class="muted" style="font-size:11px">'+new Date(r.createdAt).toLocaleDateString()+'</div></div>'+
+      '<div style="text-align:right"><span class="badge '+(spent>0?'b-active':'b-pending')+'">'+(spent>0?'converted':'registered')+'</span><div class="muted" style="font-size:11px;margin-top:2px">'+naira(spent)+'</div></div></div>';
   }).join('');
   return '<div class="row" style="margin-bottom:8px"><b>Referrals</b><span class="badge b-active">'+referred.length+' total</span></div>'+
-    (rows || '<div class="card muted" style="text-align:center">No referrals yet — share your link to get started.</div>');
+    '<div class="card">'+(rows || '<div class="muted" style="text-align:center;padding:14px 0">No referrals yet — share your link to get started.</div>')+'</div>';
 }
 function renderAffEarnings_(u){
   var reqs = STATE.payoutRequests.filter(function(p){return p.userId===u.id && p.type==='affiliate';});
   var paid = reqs.filter(function(p){return p.status==='paid';}).reduce(function(s,p){return s+p.amount;},0);
-  return '<div class="grid" style="margin-bottom:14px">'+
-    '<div class="stat-mini"><div class="lbl">Total Earned</div><div class="val">'+naira(u.affiliateEarnings||0)+'</div></div>'+
-    '<div class="stat-mini"><div class="lbl">Available</div><div class="val">'+naira(affiliateAvailable_(u.id))+'</div></div>'+
-    '<div class="stat-mini"><div class="lbl">Paid Out</div><div class="val">'+naira(paid)+'</div></div></div>'+
-    '<div class="card"><div class="row"><b>Commissions ('+affCurrentTier_(u).current.commissionPct+'%)</b></div>'+
-    (reqs.length? reqs.map(function(r){return '<div class="kv">'+naira(r.amount)+' — <span class="badge '+(r.status==='paid'?'b-active':'b-pending')+'">'+r.status+'</span></div>';}).join('') : '<div class="muted" style="text-align:center;padding:14px 0">No commissions yet</div>')+'</div>'+
-    '<div class="card"><div class="row"><b>Payouts</b><button class="btn small" onclick="go(\'payout\')">Withdraw</button></div></div>';
+  return '<div class="card"><div class="row"><b>Available to Withdraw</b><span style="font-size:18px;font-weight:800">'+naira(affiliateAvailable_(u.id))+'</span></div>'+
+    '<div class="muted" style="font-size:12px;margin-top:2px">'+naira(paid)+' paid out so far</div>'+
+    '<button class="btn" style="width:100%;margin-top:10px" onclick="go(\'payout\')">Withdraw</button></div>'+
+    '<div class="card"><div class="row"><b>Commission History ('+affCurrentTier_(u).current.commissionPct+'%)</b></div>'+
+    (reqs.length? reqs.map(function(r){return '<div class="kv">'+naira(r.amount)+' — <span class="badge '+(r.status==='paid'?'b-active':'b-pending')+'">'+r.status+'</span></div>';}).join('') : '<div class="muted" style="text-align:center;padding:14px 0">No commissions yet</div>')+'</div>';
 }
 function renderAffToolkit_(){
   var items = STATE.settings.affiliateToolkit || [];
-  return '<div class="card"><b>Affiliate Toolkit</b><div class="muted" style="margin-top:2px">Save & share these graphics on your socials</div></div>'+
-    items.map(function(t){
-      return '<div class="promo-card"><img src="'+t.url+'" alt=""><div style="padding:12px">'+(t.caption?'<div class="muted" style="margin-bottom:8px">'+t.caption+'</div>':'')+
-        '<button class="btn ghost" style="width:100%" onclick="downloadToolkitImage(\''+t.id+'\')">Download Graphic</button></div></div>';
-    }).join('');
+  if(!items.length){
+    // Always show the tab — an explanation beats a tab that silently vanishes.
+    return '<div class="card" style="text-align:center;padding:28px 16px">'+
+      '<i data-lucide="image" style="width:28px;height:28px;color:var(--muted)"></i>'+
+      '<div style="font-weight:700;margin-top:10px">No Graphics Yet</div>'+
+      '<div class="muted" style="margin-top:4px;font-size:13px">Share-ready images will show up here as soon as they\'re added — check back soon.</div></div>';
+  }
+  return '<div class="card"><b>Share-Ready Graphics</b><div class="muted" style="margin-top:2px;font-size:12px">Download one, then post it to your socials</div></div>'+
+    '<div class="toolkit-grid">'+items.map(function(t){
+      return '<div class="toolkit-item"><img src="'+t.url+'" alt="'+(t.caption?t.caption.replace(/"/g,'&quot;'):'Promo graphic')+'">'+
+        (t.caption?'<div class="muted" style="padding:8px 8px 0;font-size:11px">'+t.caption+'</div>':'')+
+        '<button onclick="downloadToolkitImage(\''+t.id+'\')">Download</button></div>';
+    }).join('')+'</div>';
 }
 function downloadToolkitImage(id){
   var t = (STATE.settings.affiliateToolkit||[]).find(function(x){return x.id===id;});
   if(!t) return;
-  var a = document.createElement('a'); a.href=t.url; a.download='promo-graphic'; a.target='_blank';
-  document.body.appendChild(a); a.click(); a.remove();
+  // A plain <a download> doesn't reliably force a save for cross-origin images
+  // (Drive/Imgur/CDN links) — most browsers just navigate to the image instead.
+  // Fetching the bytes ourselves and downloading the resulting blob works
+  // regardless of origin, as long as the host allows a cross-origin GET.
+  fetch(t.url).then(function(r){
+    if(!r.ok) throw new Error('fetch failed');
+    return r.blob();
+  }).then(function(blob){
+    var ext = ((t.url.split('?')[0].split('.').pop())||'png').slice(0,4);
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'now-funded-promo.'+ext;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }).catch(function(){
+    // Some hosts block cross-origin fetches — fall back to opening it so the
+    // person can save it manually instead of silently failing.
+    window.open(t.url, '_blank');
+    toast('Opened in a new tab — press and hold (or right-click) to save the image');
+  });
 }
 function copyRef(){ var el=document.getElementById('reflink'); el.select(); document.execCommand('copy'); toast('Link copied'); }
 function copyText(str){
