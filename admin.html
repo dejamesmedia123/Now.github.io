@@ -856,11 +856,12 @@ function renderUsers(){
     var bookSelect = '<select onchange="setUserBookStage(\''+u.id+'\',this.value)">'+STATE.bookStages.map(function(b){return '<option value="'+b.id+'"'+(b.id===bs?' selected':'')+'>'+b.name+'</option>';}).join('')+'</select>';
     return '<tr><td>'+(u.name||'-')+'</td><td>'+(u.email||'-')+'</td>'+
       '<td>'+(u.phone?u.phone:'<span style="color:var(--danger)">none</span>')+' <button class="btn small" onclick="editUserPhone(\''+u.id+'\')">'+(u.phone?'Edit':'Set')+'</button></td>'+
-      '<td>'+accCount+'</td><td>'+referredCount+'</td><td><span class="badge b-'+(u.kycStatus==='approved'?'confirmed':u.kycStatus==='pending'?'pending':'rejected')+'">'+u.kycStatus+'</span></td><td>'+bookSelect+'</td></tr>';
+      '<td>'+accCount+'</td><td>'+referredCount+'</td><td><span class="badge b-'+(u.kycStatus==='approved'?'confirmed':u.kycStatus==='pending'?'pending':'rejected')+'">'+u.kycStatus+'</span></td><td>'+bookSelect+'</td>'+
+      '<td><button class="btn small ghost" onclick="grantAccountToUser(\''+u.id+'\')">Grant Account</button></td></tr>';
   }).join('');
   return '<h2>Users</h2>'+missingHtml+
     '<div class="card"><input placeholder="Search name, email, or phone" value="'+(window._userSearch||'')+'" oninput="window._userSearch=this.value;render()" style="max-width:260px"></div>'+
-    '<div class="card"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Accounts</th><th>Referrals</th><th>KYC</th><th>Book Stage</th></tr>'+rows+'</table></div>';
+    '<div class="card"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Accounts</th><th>Referrals</th><th>KYC</th><th>Book Stage</th><th></th></tr>'+rows+'</table></div>';
 }
 function editUserPhone(id){
   var u = STATE.users.find(function(x){return x.id===id;});
@@ -874,6 +875,44 @@ function editUserPhone(id){
     user.phone = phone;
     log('set_user_phone', (user.email||user.id)+' -> '+(phone||'(cleared)'));
   });
+}
+// Admin override: hand a user an account/MT5 login directly, with no order and no
+// payment attached — mirrors what confirmOrder() does when a paid order is confirmed,
+// minus the order/discount-code/affiliate-commission bookkeeping (there's no purchase
+// to attach those to). Still pulls an unused login from the SAME universal MT5 pool,
+// so stock isn't double-counted or double-assigned.
+function grantAccountToUser(userId){
+  var u = STATE.users.find(function(x){return x.id===userId;});
+  if(!u) return;
+  var sizeStr = prompt('Grant a funded/challenge account to '+(u.name||u.email)+'.\n\nEnter the account size — this must match an unused MT5 login already in the pool (e.g. 200000):');
+  if(!sizeStr) return;
+  var size = Number(sizeStr);
+  if(!size) return alert('Enter a valid number.');
+  var login = STATE.mt5Pool.find(function(l){return l.size===size && !l.used;});
+  if(!login) return alert('No unused MT5 login of size '+sizeLabel_(size)+' available in the pool. Add one on the MT5 Login Pool tab first.');
+  // Inherit category/profit-target/drawdown rules from a matching plan when one
+  // exists, so the account looks the same as a purchased one — otherwise just ask
+  // for a cosmetic category label.
+  var plan = STATE.plans.find(function(p){return p.size===size;});
+  var category = plan ? plan.category : (prompt('Category tag for this account (e.g. equity-2step):', '') || '');
+  if(!confirm('Grant the '+sizeLabel_(size)+' account (login '+login.login+') to '+(u.email||u.name)+' for free, with no order attached?')) return;
+  saveAction(function(){
+    var freshUser = STATE.users.find(function(x){return x.id===userId;});
+    var freshLogin = STATE.mt5Pool.find(function(l){return l.id===login.id;});
+    if(!freshUser){ alert('User no longer exists.'); return false; }
+    if(!freshLogin || freshLogin.used){ alert('That login is no longer available — it may have just been claimed elsewhere. Try again.'); return false; }
+    freshLogin.used = true; freshLogin.assignedTo = userId;
+    var profitTargetPct = plan ? pctFromRules_(plan.rules, 'profit target') : null;
+    var maxDrawdownPct = plan ? (pctFromRules_(plan.rules, 'max drawdown') || pctFromRules_(plan.rules, 'max overall drawdown')) : null;
+    var acc = {id:uid('ta'),userId:userId,orderId:null,mt5PoolId:freshLogin.id,login:freshLogin.login,password:freshLogin.password,server:freshLogin.server,
+      category:category,planId:plan?plan.id:null,stage:'phase1',status:'active',reason:null,startBalance:size,currentBalance:size,equity:size,
+      profitTargetPct:profitTargetPct,maxDrawdownPct:maxDrawdownPct,
+      balanceHistory:[],poolReturned:false,createdAt:new Date().toISOString(),grantedByAdmin:true};
+    STATE.traderAccounts.push(acc);
+    STATE.notifications.push({id:uid('nt'),userId:userId,message:'An admin granted you a '+sizeLabel_(size)+' account — MT5 login assigned!',read:false,createdAt:new Date().toISOString()});
+    sendMail(freshUser.email, 'You were granted a funded account', 'Good news — an admin has granted you a '+sizeLabel_(size)+' account. Log in to your dashboard to view your MT5 login details.');
+    log('grant_account', freshUser.email+' <- '+sizeLabel_(size)+' account (login '+freshLogin.login+')');
+  }, function(){ alert('Account granted.'); });
 }
 // ---------- ACCOUNT TRANSFERS (log of user-to-user transfers + admin overrides) ----------
 function renderTransfers(){
