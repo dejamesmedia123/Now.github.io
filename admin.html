@@ -199,12 +199,38 @@ function affCurrentTier_(u){
   for(var i=0;i<tiers.length;i++){ if(tiers[i].minReferrals>converted){ next=tiers[i]; break; } }
   return {tiers:tiers, current:current||{name:'Affiliate Starter',commissionPct:15}, next:next, converted:converted};
 }
+// Branded (OTC) affiliates get a custom, per-affiliate milestone bonus on top of
+// standard tiered commission — see the OTC Affiliate Partnership Agreement.
+// otcBonusPerBlock / otcBlockSize are set per-user via setBrandedAffiliate() below;
+// otcMilestonesPaid tracks how many blocks have already been credited so re-running
+// this after further confirmed orders only pays out the NEW blocks reached, never
+// re-pays ones already credited. Bonus is folded straight into affiliateEarnings so
+// it withdraws the same way standard commission does; otcBonusEarned is kept as a
+// separate lifetime total purely for display/reporting.
+function creditOtcBonus_(referrer, converted){
+  if(!referrer || !referrer.isBrandedAffiliate) return;
+  var blockSize = referrer.otcBlockSize || 0;
+  var perBlock = referrer.otcBonusPerBlock || 0;
+  if(blockSize<=0 || perBlock<=0) return;
+  var blocksReached = Math.floor(converted / blockSize);
+  var alreadyPaid = referrer.otcMilestonesPaid || 0;
+  var newBlocks = blocksReached - alreadyPaid;
+  if(newBlocks > 0){
+    var bonus = newBlocks * perBlock;
+    referrer.affiliateEarnings = (referrer.affiliateEarnings||0) + bonus;
+    referrer.otcBonusEarned = (referrer.otcBonusEarned||0) + bonus;
+    referrer.otcMilestonesPaid = blocksReached;
+    STATE.notifications.push({id:uid('nt'),userId:referrer.id,message:'You earned '+naira(bonus)+' OTC milestone bonus ('+newBlocks+' block'+(newBlocks>1?'s':'')+' of '+blockSize+' converted referrals).',read:false,createdAt:new Date().toISOString()});
+    log('credit_otc_bonus', referrer.email+' +'+naira(bonus)+' ('+newBlocks+' block(s) of '+blockSize+' @ '+naira(perBlock)+')');
+  }
+}
 
 function render(){
   if(!gateOk) return renderGate();
   if(!STATE.chatMessages) STATE.chatMessages = [];
   if(!STATE.supportTickets) STATE.supportTickets = [];
-  STATE.users.forEach(function(u){ if(u.kycStatus===undefined) u.kycStatus='none'; if(u.kycCountry===undefined) u.kycCountry=''; if(u.kycIdNumber===undefined) u.kycIdNumber=''; if(u.bookStage===undefined) u.bookStage='bbook'; });
+  STATE.users.forEach(function(u){ if(u.kycStatus===undefined) u.kycStatus='none'; if(u.kycCountry===undefined) u.kycCountry=''; if(u.kycIdNumber===undefined) u.kycIdNumber=''; if(u.bookStage===undefined) u.bookStage='bbook';
+    if(u.isBrandedAffiliate===undefined) u.isBrandedAffiliate=false; if(u.otcBonusPerBlock===undefined) u.otcBonusPerBlock=10000; if(u.otcBlockSize===undefined) u.otcBlockSize=10; if(u.otcMilestonesPaid===undefined) u.otcMilestonesPaid=0; if(u.otcBonusEarned===undefined) u.otcBonusEarned=0; });
   if(STATE.settings.referralDiscountScope===undefined) STATE.settings.referralDiscountScope='every';
   if(STATE.settings.profitSplitPct===undefined) STATE.settings.profitSplitPct=80;
   if(STATE.settings.adminEmail===undefined) STATE.settings.adminEmail='';
@@ -360,6 +386,7 @@ function confirmOrder(orderId){
           STATE.notifications.push({id:uid('nt'),userId:referrer.id,message:'You earned '+naira(commission)+' commission ('+commissionPct+'%) from a referred purchase.',read:false,createdAt:new Date().toISOString()});
           log('credit_commission', referrer.email+' +'+naira(commission)+' at '+commissionPct+'% (order '+order.orderCode+')');
         }
+        creditOtcBonus_(referrer, affReferredConverted_(referrer));
       }
     }
     log('confirm_order', order.orderCode);
@@ -854,14 +881,62 @@ function renderUsers(){
     var referredCount = STATE.users.filter(function(x){return x.referredBy===u.id;}).length;
     var accCount = STATE.traderAccounts.filter(function(a){return a.userId===u.id && a.status!=='closed';}).length;
     var bookSelect = '<select onchange="setUserBookStage(\''+u.id+'\',this.value)">'+STATE.bookStages.map(function(b){return '<option value="'+b.id+'"'+(b.id===bs?' selected':'')+'>'+b.name+'</option>';}).join('')+'</select>';
+    var brandedCell = u.isBrandedAffiliate ?
+      ('<span class="badge b-active">Branded — '+naira(u.otcBonusPerBlock)+'/'+u.otcBlockSize+'</span> '+
+       '<button class="btn small ghost" onclick="setBrandedAffiliate(\''+u.id+'\')">Edit</button> '+
+       '<button class="btn small danger" onclick="removeBrandedAffiliate(\''+u.id+'\')">Remove</button>') :
+      ('<button class="btn small warn" onclick="setBrandedAffiliate(\''+u.id+'\')">Set Branded</button>');
     return '<tr><td>'+(u.name||'-')+'</td><td>'+(u.email||'-')+'</td>'+
       '<td>'+(u.phone?u.phone:'<span style="color:var(--danger)">none</span>')+' <button class="btn small" onclick="editUserPhone(\''+u.id+'\')">'+(u.phone?'Edit':'Set')+'</button></td>'+
       '<td>'+accCount+'</td><td>'+referredCount+'</td><td><span class="badge b-'+(u.kycStatus==='approved'?'confirmed':u.kycStatus==='pending'?'pending':'rejected')+'">'+u.kycStatus+'</span></td><td>'+bookSelect+'</td>'+
+      '<td>'+brandedCell+'</td>'+
       '<td><button class="btn small ghost" onclick="grantAccountToUser(\''+u.id+'\')">Grant Account</button></td></tr>';
   }).join('');
   return '<h2>Users</h2>'+missingHtml+
+    '<div class="card muted">Branded Affiliate = a custom OTC affiliate deal (see the OTC Affiliate Partnership Agreement): on top of standard tiered commission, the affiliate earns an extra one-off bonus for every block of N converted referrals reached. Terms are set per-affiliate below.</div>'+
     '<div class="card"><input placeholder="Search name, email, or phone" value="'+(window._userSearch||'')+'" oninput="window._userSearch=this.value;render()" style="max-width:260px"></div>'+
-    '<div class="card"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Accounts</th><th>Referrals</th><th>KYC</th><th>Book Stage</th><th></th></tr>'+rows+'</table></div>';
+    '<div class="card"><table><tr><th>Name</th><th>Email</th><th>Phone</th><th>Accounts</th><th>Referrals</th><th>KYC</th><th>Book Stage</th><th>Branded Affiliate</th><th></th></tr>'+rows+'</table></div>';
+}
+// Flags a user as a Branded (OTC) Affiliate and sets their custom milestone bonus
+// terms — a ₦ amount paid for every block of N converted referrals, negotiated
+// per-affiliate (per the OTC Affiliate Partnership Agreement) rather than a single
+// global rule. Re-running this on an already-branded affiliate just edits the terms;
+// it does not touch otcMilestonesPaid/otcBonusEarned, so past bonuses already paid
+// are never re-paid or clawed back just for changing the rate going forward.
+function setBrandedAffiliate(userId){
+  var u = STATE.users.find(function(x){return x.id===userId;});
+  if(!u) return;
+  var perBlockStr = prompt('OTC bonus amount (₦) paid per block of converted referrals for '+(u.name||u.email)+':', u.otcBonusPerBlock||10000);
+  if(perBlockStr===null) return;
+  var perBlock = Number(perBlockStr);
+  if(isNaN(perBlock) || perBlock<=0) return alert('Enter a valid positive amount.');
+  var blockSizeStr = prompt('Block size — number of converted referrals per bonus block:', u.otcBlockSize||10);
+  if(blockSizeStr===null) return;
+  var blockSize = Number(blockSizeStr);
+  if(isNaN(blockSize) || blockSize<=0) return alert('Enter a valid positive whole number.');
+  saveAction(function(){
+    var user = STATE.users.find(function(x){return x.id===userId;});
+    if(!user) return false;
+    var wasBranded = user.isBrandedAffiliate;
+    user.isBrandedAffiliate = true;
+    user.otcBonusPerBlock = perBlock;
+    user.otcBlockSize = Math.round(blockSize);
+    if(user.otcMilestonesPaid===undefined) user.otcMilestonesPaid = 0;
+    if(user.otcBonusEarned===undefined) user.otcBonusEarned = 0;
+    STATE.notifications.push({id:uid('nt'),userId:userId,message:'You\'ve been enrolled as a Branded Affiliate — '+naira(perBlock)+' bonus for every '+Math.round(blockSize)+' converted referrals, on top of standard commission.',read:false,createdAt:new Date().toISOString()});
+    log(wasBranded?'update_branded_affiliate':'set_branded_affiliate', (user.email||user.id)+' — '+naira(perBlock)+' / '+Math.round(blockSize)+' referrals');
+  }, function(){ alert('Branded affiliate terms saved.'); });
+}
+function removeBrandedAffiliate(userId){
+  var u = STATE.users.find(function(x){return x.id===userId;});
+  if(!u) return;
+  if(!confirm('Remove branded (OTC) affiliate status from '+(u.name||u.email)+'? Their standard tiered commission continues as normal — this only stops future OTC milestone bonuses. Bonuses already earned are not clawed back.')) return;
+  saveAction(function(){
+    var user = STATE.users.find(function(x){return x.id===userId;});
+    if(!user) return false;
+    user.isBrandedAffiliate = false;
+    log('remove_branded_affiliate', user.email||user.id);
+  });
 }
 function editUserPhone(id){
   var u = STATE.users.find(function(x){return x.id===id;});
