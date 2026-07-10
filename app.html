@@ -740,7 +740,8 @@ function renderNav(){
     {v:'checkout', label:'Buy a Challenge', icon:'shopping-cart'},
     {v:'plansSection', label:'Plans', icon:'award', anchor:'plansSection'},
     {v:'rulesSection', label:'Rules', icon:'shield-check', anchor:'rulesSection'},
-    {v:'faqSection', label:'FAQ', icon:'help-circle', anchor:'faqSection'}
+    {v:'faqSection', label:'FAQ', icon:'help-circle', anchor:'faqSection'},
+    {v:'blog.html', label:'Blog', icon:'newspaper', external:true}
   ];
   if(currentUserId){
     drawerItems.push({v:'dashboard', label:'Dashboard', icon:'layout-dashboard'});
@@ -752,6 +753,10 @@ function renderNav(){
   if(drawerBody){
     drawerBody.innerHTML = drawerItems.map(function(it){
       var isActive = view===it.v;
+      if(it.external){
+        return '<a class="drawer-item" href="'+it.v+'" style="text-decoration:none;color:inherit">'+
+          '<i data-lucide="'+it.icon+'" style="width:18px;height:18px"></i><span>'+it.label+'</span></a>';
+      }
       var onclick = it.anchor ? "drawerNavAnchor('index','"+it.anchor+"')" : "drawerNav('"+it.v+"')";
       return '<div class="drawer-item '+(isActive?'active':'')+'" onclick="'+onclick+'">'+
         '<i data-lucide="'+it.icon+'" style="width:18px;height:18px"></i><span>'+it.label+'</span></div>';
@@ -910,6 +915,7 @@ function renderIndex(){
     '<div class="section-title">Affiliate Program</div><div class="card row"><span>Earn commission every time someone you refer gets paid out.</span><button class="btn ghost" onclick="go(currentUserId?\'affiliate\':\'signup\')">Learn More</button></div>'+
     '<footer style="margin-top:50px;padding-top:20px;border-top:1px solid var(--line);text-align:center" class="muted">'+
     '<div class="row" style="justify-content:center;gap:16px;margin-bottom:10px"><i data-lucide="twitter" style="width:16px;height:16px"></i><i data-lucide="instagram" style="width:16px;height:16px"></i><i data-lucide="send" style="width:16px;height:16px"></i></div>'+
+    '<div style="margin-bottom:6px"><a href="blog.html" style="text-decoration:underline">Blog</a></div>'+
     '© '+new Date().getFullYear()+' Now Funded. Trading involves risk. Terms & Conditions · Privacy Policy · Risk Disclosure</footer>';
 }
 function setDD(id){ planFilterDD=id; render(); }
